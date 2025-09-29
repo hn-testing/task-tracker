@@ -1,0 +1,204 @@
+from flask import Flask, render_template, request, redirect, url_for, session
+from app.db import database
+import os
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_pyfile('../config/config.py')
+    app.secret_key = 'your_secret_key_here'
+
+    # Initialize DB and add dummy data only once at app startup
+    database.init_db()
+    conn = database.connect_db()
+    cur = conn.cursor()
+    cur.execute('SELECT COUNT(*) FROM designations')
+    if cur.fetchone()[0] == 0:
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('CEO', None))
+        ceo_id = cur.lastrowid
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Head of Department', ceo_id))
+        hod_id = cur.lastrowid
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Manager', hod_id))
+        manager_id = cur.lastrowid
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Staff', manager_id))
+        conn.commit()
+    conn.close()
+
+    @app.route('/')
+    def home():
+        if 'user_id' in session:
+            current_user = database.get_employee(session['user_id'])
+        else:
+            current_user = None
+        return render_template('index.html', current_user=current_user)
+
+    @app.route('/hello')
+    def hello_world():
+        return 'Hello, World!'
+
+    @app.route('/employees', methods=['GET'])
+    def employees():
+        employees = database.get_employees()
+        designations = database.get_designations()
+        valid_managers = employees
+        current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
+        return render_template('employees.html', employees=employees, designations=designations, valid_managers=valid_managers, current_user=current_user)
+
+    @app.route('/employees/create', methods=['POST'])
+    def create_employee():
+        name = request.form['name']
+        email = request.form['email']
+        designation_id = int(request.form['designation_id'])
+        manager_id = request.form.get('manager_id') or None
+        error = None
+        try:
+            database.create_employee(name, email, designation_id, int(manager_id) if manager_id else None)
+        except Exception as e:
+            import sqlite3
+            if isinstance(e, sqlite3.IntegrityError) and 'UNIQUE constraint failed: employees.email' in str(e):
+                error = 'Employee with this email already exists.'
+            else:
+                error = 'An error occurred while creating the employee.'
+        employees = database.get_employees()
+        designations = database.get_designations()
+        valid_managers = employees
+        return render_template('employees.html', employees=employees, designations=designations, error=error, valid_managers=valid_managers)
+
+    @app.route('/employees/update/<int:emp_id>', methods=['GET', 'POST'])
+    def update_employee(emp_id):
+        if request.method == 'POST':
+            name = request.form['name']
+            email = request.form['email']
+            designation_id = int(request.form['designation_id'])
+            manager_id = request.form.get('manager_id') or None
+            database.update_employee(emp_id, name, email, designation_id, int(manager_id) if manager_id else None)
+            return redirect(url_for('employees'))
+        emp = database.get_employee(emp_id)
+        employees = database.get_employees()
+        designations = database.get_designations()
+        valid_managers = [e for e in employees if e['id'] != emp_id]
+        current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
+        return render_template('employees.html', employees=employees, designations=designations, edit_employee=emp, valid_managers=valid_managers, current_user=current_user)
+
+    @app.route('/employees/delete/<int:emp_id>')
+    def delete_employee(emp_id):
+        database.delete_employee(emp_id)
+        return redirect(url_for('employees'))
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        error = None
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
+            user = database.get_employee_by_email_and_password(email, password)
+            if user:
+                session['user_email'] = email
+                session['user_id'] = user['id']
+                return redirect(url_for('tasks'))
+            else:
+                error = 'Invalid email or password.'
+        return render_template('login.html', error=error)
+
+    @app.route('/logout')
+    def logout():
+        session.clear()
+        return redirect(url_for('login'))
+
+    @app.route('/tasks', methods=['GET'])
+    def tasks():
+        if 'user_email' not in session:
+            return redirect(url_for('login'))
+        user_id = session['user_id']
+        all_tasks = database.get_tasks_by_employee(user_id)
+        employees = database.get_employees()
+        current_user = database.get_employee(user_id)
+        for t in all_tasks:
+            t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+        # Get subordinate employees
+        lower_designation_ids = database.get_lower_designation_ids(current_user['designation_id'])
+        subordinates = [e for e in employees if e['designation_id'] in lower_designation_ids]
+        subordinate_tasks = []
+        for emp in subordinates:
+            emp_tasks = database.get_tasks_by_employee(emp['id'])
+            for t in emp_tasks:
+                t['employee_name'] = emp['name']
+                t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+                subordinate_tasks.append(t)
+        return render_template('tasks.html', tasks=all_tasks, employees=employees, current_user=current_user, subordinate_tasks=subordinate_tasks)
+
+    @app.route('/tasks/assign', methods=['GET', 'POST'])
+    def assign_task():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        employees = database.get_employees()
+        error = None
+        task_types = ['Sell product1', 'Sell product2', 'Support', 'Demo', 'Other']
+        current_user = database.get_employee(session['user_id'])
+        current_designation_id = current_user['designation_id']
+        lower_designation_ids = database.get_lower_designation_ids(current_designation_id)
+        assignable_employees = [e for e in employees if e['designation_id'] in lower_designation_ids]
+        if request.method == 'POST':
+            name = request.form['name']
+            category = request.form['category']
+            type_ = request.form['type']
+            start_date = request.form['start_date']
+            end_date = request.form['end_date']
+            target = int(request.form['target'])
+            status = request.form['status']
+            current_progress = int(request.form['current_progress'])
+            assigned_by = session['user_id']
+            assigned_to = int(request.form['assigned_to'])
+            if assigned_to not in [e['id'] for e in assignable_employees]:
+                error = 'You can only assign tasks to subordinates.'
+            else:
+                try:
+                    database.create_task(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, current_progress=current_progress)
+                    return redirect(url_for('tasks'))
+                except Exception as e:
+                    error = 'Error assigning task.'
+        return render_template('assign_task.html', employees=assignable_employees, error=error, task_types=task_types, current_user=current_user)
+
+    @app.route('/tasks/update_progress/<int:task_id>', methods=['POST'])
+    def update_task_progress(task_id):
+        current_progress = int(request.form['current_progress'])
+        status = request.form['status']
+        from app.db import database
+        database.update_task_progress_and_status(task_id, current_progress, status)
+        return redirect(url_for('tasks'))
+
+    @app.route('/tasks/report', methods=['GET', 'POST'])
+    def task_report():
+        employees = database.get_employees()
+        all_tasks = []
+        current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
+        category = request.form.get('category') if request.method == 'POST' else None
+        status = request.form.get('status') if request.method == 'POST' else None
+        assigned_by = request.form.get('assigned_by') if request.method == 'POST' else None
+        assigned_to = request.form.get('assigned_to') if request.method == 'POST' else None
+        progress_min = request.form.get('progress_min') if request.method == 'POST' else None
+        progress_max = request.form.get('progress_max') if request.method == 'POST' else None
+        for emp in employees:
+            emp_tasks = database.get_tasks_for_employee(emp['id'])
+            for t in emp_tasks:
+                t['employee_name'] = emp['name']
+                # Get assigned_by_name
+                assigned_by_emp = next((e for e in employees if e['id'] == t['assigned_by']), None)
+                t['assigned_by_name'] = assigned_by_emp['name'] if assigned_by_emp else t['assigned_by']
+                t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+                all_tasks.append(t)
+        filtered_tasks = all_tasks
+        if category:
+            filtered_tasks = [t for t in filtered_tasks if t['category'] == category]
+        if status:
+            filtered_tasks = [t for t in filtered_tasks if t['status'] == status]
+        if assigned_by:
+            filtered_tasks = [t for t in filtered_tasks if str(t['assigned_by']) == assigned_by or t.get('assigned_by_name','') == assigned_by]
+        if assigned_to:
+            filtered_tasks = [t for t in filtered_tasks if str(t['assigned_to']) == assigned_to or t.get('employee_name','') == assigned_to]
+        if progress_min:
+            filtered_tasks = [t for t in filtered_tasks if t['progress'] >= float(progress_min)]
+        if progress_max:
+            filtered_tasks = [t for t in filtered_tasks if t['progress'] <= float(progress_max)]
+        return render_template('task_report.html', tasks=filtered_tasks, current_user=current_user, employees=employees, category=category, status=status, assigned_by=assigned_by, assigned_to=assigned_to, progress_min=progress_min, progress_max=progress_max)
+
+    return app
