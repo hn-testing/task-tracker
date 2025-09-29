@@ -40,8 +40,9 @@ def create_app():
         employees = database.get_employees()
         designations = database.get_designations()
         valid_managers = employees
+        branches = database.get_branches()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, valid_managers=valid_managers, current_user=current_user)
+        return render_template('employees.html', employees=employees, designations=designations, valid_managers=valid_managers, branches=branches, current_user=current_user)
 
     @app.route('/employees/create', methods=['POST'])
     def create_employee():
@@ -49,9 +50,10 @@ def create_app():
         email = request.form['email']
         designation_id = int(request.form['designation_id'])
         manager_id = request.form.get('manager_id') or None
+        branch_id = request.form.get('branch_id') or None
         error = None
         try:
-            database.create_employee(name, email, designation_id, int(manager_id) if manager_id else None)
+            database.create_employee(name, email, designation_id, int(manager_id) if manager_id else None, int(branch_id) if branch_id else None)
         except Exception as e:
             import sqlite3
             if isinstance(e, sqlite3.IntegrityError) and 'UNIQUE constraint failed: employees.email' in str(e):
@@ -61,7 +63,9 @@ def create_app():
         employees = database.get_employees()
         designations = database.get_designations()
         valid_managers = employees
-        return render_template('employees.html', employees=employees, designations=designations, error=error, valid_managers=valid_managers)
+        branches = database.get_branches()
+        current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
+        return render_template('employees.html', employees=employees, designations=designations, error=error, valid_managers=valid_managers, branches=branches, current_user=current_user)
 
     @app.route('/employees/update/<int:emp_id>', methods=['GET', 'POST'])
     def update_employee(emp_id):
@@ -70,14 +74,16 @@ def create_app():
             email = request.form['email']
             designation_id = int(request.form['designation_id'])
             manager_id = request.form.get('manager_id') or None
-            database.update_employee(emp_id, name, email, designation_id, int(manager_id) if manager_id else None)
+            branch_id = request.form.get('branch_id') or None
+            database.update_employee(emp_id, name, email, designation_id, int(manager_id) if manager_id else None, int(branch_id) if branch_id else None)
             return redirect(url_for('employees'))
         emp = database.get_employee(emp_id)
         employees = database.get_employees()
         designations = database.get_designations()
         valid_managers = [e for e in employees if e['id'] != emp_id]
+        branches = database.get_branches()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, edit_employee=emp, valid_managers=valid_managers, current_user=current_user)
+        return render_template('employees.html', employees=employees, designations=designations, edit_employee=emp, valid_managers=valid_managers, branches=branches, current_user=current_user)
 
     @app.route('/employees/delete/<int:emp_id>')
     def delete_employee(emp_id):
@@ -166,26 +172,29 @@ def create_app():
         database.update_task_progress_and_status(task_id, current_progress, status)
         return redirect(url_for('tasks'))
 
-    @app.route('/tasks/report', methods=['GET', 'POST'])
+    @app.route('/tasks/report', methods=['GET'])
     def task_report():
         employees = database.get_employees()
         all_tasks = []
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        category = request.form.get('category') if request.method == 'POST' else None
-        status = request.form.get('status') if request.method == 'POST' else None
-        assigned_by = request.form.get('assigned_by') if request.method == 'POST' else None
-        assigned_to = request.form.get('assigned_to') if request.method == 'POST' else None
-        progress_min = request.form.get('progress_min') if request.method == 'POST' else None
-        progress_max = request.form.get('progress_max') if request.method == 'POST' else None
+        category = request.args.get('category')
+        status = request.args.get('status')
+        assigned_by = request.args.get('assigned_by')
+        assigned_to = request.args.get('assigned_to')
+        progress_min = request.args.get('progress_min')
+        progress_max = request.args.get('progress_max')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        # Collect all tasks and annotate with names
         for emp in employees:
             emp_tasks = database.get_tasks_for_employee(emp['id'])
             for t in emp_tasks:
                 t['employee_name'] = emp['name']
-                # Get assigned_by_name
                 assigned_by_emp = next((e for e in employees if e['id'] == t['assigned_by']), None)
                 t['assigned_by_name'] = assigned_by_emp['name'] if assigned_by_emp else t['assigned_by']
                 t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
                 all_tasks.append(t)
+        # Apply filters
         filtered_tasks = all_tasks
         if category:
             filtered_tasks = [t for t in filtered_tasks if t['category'] == category]
@@ -199,6 +208,46 @@ def create_app():
             filtered_tasks = [t for t in filtered_tasks if t['progress'] >= float(progress_min)]
         if progress_max:
             filtered_tasks = [t for t in filtered_tasks if t['progress'] <= float(progress_max)]
-        return render_template('task_report.html', tasks=filtered_tasks, current_user=current_user, employees=employees, category=category, status=status, assigned_by=assigned_by, assigned_to=assigned_to, progress_min=progress_min, progress_max=progress_max)
+        if start_date:
+            filtered_tasks = [t for t in filtered_tasks if t['start_date'] >= start_date]
+        if end_date:
+            filtered_tasks = [t for t in filtered_tasks if t['end_date'] <= end_date]
+        num_tasks = len(filtered_tasks)
+        # Calculate top/bottom 5 for team and personal
+        def get_top_bottom(tasks, category):
+            emp_stats = {}
+            for t in tasks:
+                if t['category'] != category:
+                    continue
+                eid = t['assigned_to']
+                if eid not in emp_stats:
+                    emp_stats[eid] = {'name': t['employee_name'], 'percent_sum': 0, 'count': 0}
+                percent = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+                emp_stats[eid]['percent_sum'] += percent
+                emp_stats[eid]['count'] += 1
+            results = []
+            for eid, stat in emp_stats.items():
+                avg_percent = (stat['percent_sum'] / stat['count']) if stat['count'] else 0
+                results.append({'name': stat['name'], 'avg_percent': avg_percent, 'num_tasks': stat['count']})
+            results.sort(key=lambda x: x['avg_percent'], reverse=True)
+            top5 = results[:5]
+            bottom5 = results[-5:] if len(results) >= 5 else results[-len(results):]
+            return top5, bottom5
+        top5_team, bottom5_team = get_top_bottom(all_tasks, 'team')
+        top5_personal, bottom5_personal = get_top_bottom(all_tasks, 'personal')
+        # Prepare branch-wise chart data
+        branch_chart_data = {}
+        for emp in employees:
+            branch = emp.get('designation') or 'Unknown'
+            emp_tasks = [t for t in filtered_tasks if t['employee_name'] == emp['name']]
+            if not emp_tasks:
+                continue
+            avg_progress = sum(t['progress'] for t in emp_tasks) / len(emp_tasks)
+            if branch not in branch_chart_data:
+                branch_chart_data[branch] = []
+            branch_chart_data[branch].append(avg_progress)
+        branch_labels = list(branch_chart_data.keys())
+        branch_avg_progress = [sum(vals)/len(vals) for vals in branch_chart_data.values()]
+        return render_template('task_report.html', tasks=filtered_tasks, current_user=current_user, employees=employees, category=category, status=status, assigned_by=assigned_by, assigned_to=assigned_to, progress_min=progress_min, progress_max=progress_max, top5_team=top5_team, bottom5_team=bottom5_team, top5_personal=top5_personal, bottom5_personal=bottom5_personal, start_date=start_date, end_date=end_date, num_tasks=num_tasks, branch_labels=branch_labels, branch_avg_progress=branch_avg_progress)
 
     return app

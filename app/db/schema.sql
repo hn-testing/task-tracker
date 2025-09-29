@@ -1,3 +1,8 @@
+-- Table for branches
+CREATE TABLE IF NOT EXISTS branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
 -- Table for designations
 CREATE TABLE IF NOT EXISTS designations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,8 +19,10 @@ CREATE TABLE IF NOT EXISTS employees (
     password TEXT NOT NULL,
     designation_id INTEGER NOT NULL,
     manager_id INTEGER,
+    branch_id INTEGER,
     FOREIGN KEY (designation_id) REFERENCES designations(id),
-    FOREIGN KEY (manager_id) REFERENCES employees(id)
+    FOREIGN KEY (manager_id) REFERENCES employees(id),
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
 );
 
 -- Table for tasks

@@ -16,10 +16,11 @@ def get_employees():
     conn = connect_db()
     cur = conn.cursor()
     cur.execute('''
-        SELECT e.id, e.name, e.email, e.designation_id, d.title as designation, m.name as manager_name
+        SELECT e.id, e.name, e.email, e.designation_id, d.title as designation, m.name as manager_name, b.name as branch_name
         FROM employees e
         LEFT JOIN designations d ON e.designation_id = d.id
         LEFT JOIN employees m ON e.manager_id = m.id
+        LEFT JOIN branches b ON e.branch_id = b.id
     ''')
     employees = [dict(zip([column[0] for column in cur.description], row)) for row in cur.fetchall()]
     conn.close()
@@ -49,11 +50,11 @@ def get_valid_managers(designation_id):
         conn.close()
         return managers
 
-def create_employee(name, email, designation_id, manager_id):
+def create_employee(name, email, designation_id, manager_id, branch_id):
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute('INSERT INTO employees (name, email, designation_id, manager_id) VALUES (?, ?, ?, ?)',
-                (name, email, designation_id, manager_id if manager_id else None))
+    cur.execute('INSERT INTO employees (name, email, designation_id, manager_id, branch_id) VALUES (?, ?, ?, ?, ?)',
+                (name, email, designation_id, manager_id if manager_id else None, branch_id if branch_id else None))
     conn.commit()
     conn.close()
 
@@ -67,11 +68,11 @@ def get_employee(emp_id):
         return dict(zip([column[0] for column in cur.description], row))
     return None
 
-def update_employee(emp_id, name, email, designation_id, manager_id):
+def update_employee(emp_id, name, email, designation_id, manager_id, branch_id):
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute('''UPDATE employees SET name=?, email=?, designation_id=?, manager_id=? WHERE id=?''',
-                (name, email, designation_id, manager_id if manager_id else None, emp_id))
+    cur.execute('''UPDATE employees SET name=?, email=?, designation_id=?, manager_id=?, branch_id=? WHERE id=?''',
+                (name, email, designation_id, manager_id if manager_id else None, branch_id if branch_id else None, emp_id))
     conn.commit()
     conn.close()
 
@@ -186,3 +187,11 @@ def get_lower_designation_ids(designation_id):
     ids = get_children(designation_id)
     conn.close()
     return ids
+
+def get_branches():
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute('SELECT id, name FROM branches')
+    branches = [dict(zip([column[0] for column in cur.description], row)) for row in cur.fetchall()]
+    conn.close()
+    return branches

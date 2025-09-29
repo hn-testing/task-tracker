@@ -44,7 +44,7 @@
             <span style="float:right; color:#fff; font-weight:bold;">{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
         </div>
         <h1>Task Report</h1>
-        <form method="POST" style="margin-bottom:24px; display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+        <form method="get" style="display:flex; flex-wrap:wrap; gap:16px; align-items:end; margin-bottom:24px;">
             <div>
                 <label for="category">Category:</label>
                 <select name="category" id="category">
@@ -91,9 +91,18 @@
                 <label for="progress_max">Progress Max (%):</label>
                 <input type="number" name="progress_max" id="progress_max" min="0" max="100" value="{{ progress_max or '' }}">
             </div>
+            <div>
+                <label for="start_date">Start Date:</label>
+                <input type="date" name="start_date" id="start_date" value="{{ start_date or '' }}">
+            </div>
+            <div>
+                <label for="end_date">End Date:</label>
+                <input type="date" name="end_date" id="end_date" value="{{ end_date or '' }}">
+            </div>
             <button type="submit" style="padding:8px 16px;">Filter</button>
             <a href="/tasks/report" style="padding:8px 16px; background:#eee; color:#333; border-radius:4px; text-decoration:none; margin-left:8px;">Clear Filter</a>
         </form>
+        <div style="margin:16px 0; font-weight:bold;">Number of tasks: {{ num_tasks }}</div>
         <table>
             <tr>
                 <th>Task Name</th>
@@ -124,6 +133,112 @@
             </tr>
             {% endfor %}
         </table>
+        <h2 style="margin-top:32px;">Top 5 Team Achievers</h2>
+        <table>
+            <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
+            {% for emp in top5_team %}
+            <tr>
+                <td>{{ emp.name }}</td>
+                <td>{{ '%.2f'|format(emp.avg_percent) }}</td>
+                <td>{{ emp.num_tasks }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <h2 style="margin-top:24px;">Bottom 5 Team Achievers</h2>
+        <table>
+            <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
+            {% for emp in bottom5_team %}
+            <tr>
+                <td>{{ emp.name }}</td>
+                <td>{{ '%.2f'|format(emp.avg_percent) }}</td>
+                <td>{{ emp.num_tasks }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <h2 style="margin-top:32px;">Top 5 Personal Achievers</h2>
+        <table>
+            <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
+            {% for emp in top5_personal %}
+            <tr>
+                <td>{{ emp.name }}</td>
+                <td>{{ '%.2f'|format(emp.avg_percent) }}</td>
+                <td>{{ emp.num_tasks }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <h2 style="margin-top:24px;">Bottom 5 Personal Achievers</h2>
+        <table>
+            <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
+            {% for emp in bottom5_personal %}
+            <tr>
+                <td>{{ emp.name }}</td>
+                <td>{{ '%.2f'|format(emp.avg_percent) }}</td>
+                <td>{{ emp.num_tasks }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <div style="margin-top:32px;">
+            <h3>Task Insights</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:32px;">
+                <div>
+                    <canvas id="progressBarChart" width="400" height="300"></canvas>
+                </div>
+                <div>
+                    <canvas id="statusPieChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <script>
+    // Prepare data from Jinja context
+    const tasks = JSON.parse('{{ tasks|tojson|safe }}');
+            // Bar chart: Progress (%) by branch
+        const branchLabels = JSON.parse('{{ branch_labels|tojson|safe }}');
+        const branchAvgProgress = JSON.parse('{{ branch_avg_progress|tojson|safe }}');
+            new Chart(document.getElementById('progressBarChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: branchLabels,
+                    datasets: [{
+                        label: 'Avg Progress (%)',
+                        data: branchAvgProgress,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+            // Pie chart: Status distribution
+            const statusCount = {};
+            tasks.forEach(t => {
+                statusCount[t.status] = (statusCount[t.status]||0)+1;
+            });
+            const statusLabels = Object.keys(statusCount);
+            const statusData = statusLabels.map(s => statusCount[s]);
+            // Draw Pie Chart
+            new Chart(document.getElementById('statusPieChart').getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: statusLabels,
+                    datasets: [{
+                        label: 'Status',
+                        data: statusData,
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(255, 205, 86, 0.6)',
+                            'rgba(201, 203, 207, 0.6)',
+                            'rgba(54, 162, 235, 0.6)'
+                        ]
+                    }]
+                }
+            });
+        </script>
     </div>
 </body>
 </html>

@@ -100,12 +100,21 @@
                     {% endfor %}
                 </datalist>
             </div>
+            <div class="form-group">
+                <label for="branch_id">Branch:</label>
+                <input list="branch_list" name="branch_id" id="branch_id" value="{{ edit_employee.branch_id if edit_employee else '' }}" required>
+                <datalist id="branch_list">
+                    {% for branch in branches %}
+                    <option value="{{ branch.id }}">{{ branch.name }}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
             <button type="submit">Submit</button>
             <a href="/employees" style="margin-top:8px; display:inline-block; padding:8px 16px; background:#ccc; color:#333; border-radius:4px; text-decoration:none; text-align:center;">Cancel</a>
         </form>
         {% else %}
         <h2>Add Employee</h2>
-        <form method="POST" class="employee-form">
+        <form method="POST" action="/employees/create" class="employee-form">
             <div class="form-group">
                 <label for="name">Name:</label>
                 <input type="text" name="name" id="name" required>
@@ -132,6 +141,15 @@
                     {% endfor %}
                 </datalist>
             </div>
+            <div class="form-group">
+                <label for="branch_id">Branch:</label>
+                <input list="branch_list" name="branch_id" id="branch_id" required>
+                <datalist id="branch_list">
+                    {% for branch in branches %}
+                    <option value="{{ branch.id }}">{{ branch.name }}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
             <button type="submit">Submit</button>
         </form>
         {% endif %}
@@ -143,6 +161,7 @@
                 <th>Email</th>
                 <th>Designation</th>
                 <th>Manager</th>
+                <th>Branch</th>
                 <th>Actions</th>
             </tr>
             {% for employee in employees %}
@@ -150,7 +169,8 @@
                 <td>{{ employee['name'] }}</td>
                 <td>{{ employee['email'] }}</td>
                 <td>{{ employee['designation'] }}</td>
-                <td>{{ employee['manager_name'] or 'None' }}</td>
+                <td>{{ employee['manager_name'] }}</td>
+                <td>{{ employee['branch_name'] }}</td>
                 <td>
                     <a href="/employees/update/{{ employee['id'] }}">Edit</a>
                     <a href="/employees/delete/{{ employee['id'] }}" onclick="return confirm('Delete employee?');">Delete</a>
