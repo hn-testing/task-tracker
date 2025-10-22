@@ -1,5 +1,20 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-from app.db import database
+import os
+from dotenv import load_dotenv
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+env_path = os.path.join(BASE_DIR, '.env')
+load_dotenv(dotenv_path=env_path)  # Explicit load
+
+db_type = os.getenv('DB_TYPE','sqlite').lower()
+try:
+    if db_type == 'postgres':
+        from app.db import database_postgres as database
+    else:
+        from app.db import database
+except Exception as e:
+    # Fallback to sqlite with warning
+    from app.db import database as database
+    print(f"[WARN] Failed to initialize selected DB backend '{db_type}': {e}. Falling back to sqlite.")
 import os
 
 def create_app():
@@ -8,8 +23,12 @@ def create_app():
     app.secret_key = 'your_secret_key_here'
 
     # Initialize DB and add dummy data only once at app startup
-    database.init_db()
-    conn = database.connect_db()
+    try:
+        database.init_db()
+        conn = database.connect_db()
+    except Exception as e:
+        print(f"[ERROR] Database initialization failed: {e}")
+        return app
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM designations')
     if cur.fetchone()[0] == 0:

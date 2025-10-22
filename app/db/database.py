@@ -2,6 +2,8 @@
 
 import sqlite3
 import os
+from passlib.hash import bcrypt
+import hashlib
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'task_tracker.db')
 def connect_db():
@@ -50,11 +52,14 @@ def get_valid_managers(designation_id):
         conn.close()
         return managers
 
-def create_employee(name, email, designation_id, manager_id, branch_id):
+def create_employee(name, email, designation_id, manager_id, branch_id=None, raw_password='changeme'):
+    if raw_password:
+        raw_password = raw_password[:72]
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute('INSERT INTO employees (name, email, designation_id, manager_id, branch_id) VALUES (?, ?, ?, ?, ?)',
-                (name, email, designation_id, manager_id if manager_id else None, branch_id if branch_id else None))
+    hashed = bcrypt.hash(raw_password)
+    cur.execute('INSERT INTO employees (name, email, password, designation_id, manager_id, branch_id) VALUES (?, ?, ?, ?, ?, ?)',
+                (name, email, hashed, designation_id, manager_id if manager_id else None, branch_id if branch_id else None))
     conn.commit()
     conn.close()
 
@@ -68,7 +73,7 @@ def get_employee(emp_id):
         return dict(zip([column[0] for column in cur.description], row))
     return None
 
-def update_employee(emp_id, name, email, designation_id, manager_id, branch_id):
+def update_employee(emp_id, name, email, designation_id, manager_id, branch_id=None):
     conn = connect_db()
     cur = conn.cursor()
     cur.execute('''UPDATE employees SET name=?, email=?, designation_id=?, manager_id=?, branch_id=? WHERE id=?''',
@@ -148,11 +153,20 @@ def get_task(task_id):
 def get_employee_by_email_and_password(email, password):
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute('SELECT * FROM employees WHERE email = ? AND password = ?', (email, password))
+    cur.execute('SELECT * FROM employees WHERE email = ?', (email,))
     row = cur.fetchone()
+    if not row:
+        conn.close(); return None
+    data = dict(zip([column[0] for column in cur.description], row))
     conn.close()
-    if row:
-        return dict(zip([column[0] for column in cur.description], row))
+    stored = data['password']
+    if stored.startswith('legacy$'):
+        legacy_hash = stored.split('legacy$')[1]
+        if hashlib.sha256(password.encode('utf-8')).hexdigest() == legacy_hash:
+            return data
+    else:
+        if bcrypt.verify(password, stored):
+            return data
     return None
 
 def get_tasks_by_employee(employee_id):
