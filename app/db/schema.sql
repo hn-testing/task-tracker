@@ -41,3 +41,17 @@ CREATE TABLE IF NOT EXISTS tasks (
     FOREIGN KEY (assigned_by) REFERENCES employees(id),
     FOREIGN KEY (assigned_to) REFERENCES employees(id)
 );
+
+-- Table for task audit trail
+CREATE TABLE IF NOT EXISTS task_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    action TEXT NOT NULL, -- create, update, copy
+    field_name TEXT,      -- NULL or 'ALL' for aggregated create/copy
+    old_value TEXT,
+    new_value TEXT,
+    changed_by INTEGER NOT NULL,
+    changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id),
+    FOREIGN KEY (changed_by) REFERENCES employees(id)
+);

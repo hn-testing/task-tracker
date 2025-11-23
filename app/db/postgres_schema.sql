@@ -32,3 +32,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     assigned_by INTEGER NOT NULL REFERENCES employees(id),
     assigned_to INTEGER NOT NULL REFERENCES employees(id)
 );
+
+CREATE TABLE IF NOT EXISTS task_audit (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    action TEXT NOT NULL,
+    field_name TEXT,
+    old_value TEXT,
+    new_value TEXT,
+    changed_by INTEGER NOT NULL REFERENCES employees(id),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

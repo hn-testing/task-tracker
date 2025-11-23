@@ -9,8 +9,14 @@ tasks can be exported
 
 
 
-show audit trail of all the changes to the tasks (who changed what and when)
+show audit trail of all the changes to the tasks (when and who created, who changed what and when)
 
 add copy task functionlity
 
+
+
 tasks can be recurring (daily, weekly, monthly yearly)
+
+
+functionality to upload tasks
+functionality to upload employees

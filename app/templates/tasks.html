@@ -64,6 +64,8 @@
                 <th>Assigned To</th>
                 <th>Update</th>
                 <th>Edit</th>
+                <th>Copy</th>
+                <th>Audit</th>
             </tr>
             {% for task in tasks %}
             <tr>
@@ -96,6 +98,8 @@
                     <a href="/tasks/edit/{{ task['id'] }}">Edit</a>
                     {% else %}-{% endif %}
                 </td>
+                <td><a href="/tasks/copy/{{ task['id'] }}">Copy</a></td>
+                <td><a href="/tasks/audit/{{ task['id'] }}">Audit</a></td>
             </tr>
             {% endfor %}
         </table>
@@ -115,6 +119,8 @@
                 <th>Assigned By</th>
                 <th>Assigned To</th>
                 <th>Edit</th>
+                <th>Copy</th>
+                <th>Audit</th>
             </tr>
             {% for task in subordinate_tasks %}
             <tr>
@@ -135,6 +141,8 @@
                     <a href="/tasks/edit/{{ task['id'] }}">Edit</a>
                     {% else %}-{% endif %}
                 </td>
+                <td><a href="/tasks/copy/{{ task['id'] }}">Copy</a></td>
+                <td><a href="/tasks/audit/{{ task['id'] }}">Audit</a></td>
             </tr>
             {% endfor %}
         </table>

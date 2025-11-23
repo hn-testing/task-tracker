@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Copy Task</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: Arial, sans-serif; background:#f8f9fa; margin:0; }
+        .container { width:100%; max-width:900px; margin:40px auto; background:#fff; padding:24px; border-radius:8px; box-shadow:0 2px 8px #ccc; }
+        h1 { color:#333; }
+        label { display:block; margin:12px 0 4px; font-weight:bold; }
+        input, select { width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; }
+        button { background:#007bff; color:#fff; border:none; padding:10px 20px; border-radius:4px; cursor:pointer; font-weight:bold; }
+        button:hover { background:#0056b3; }
+        .menu { background:#007bff; padding:12px; border-radius:8px 8px 0 0; display:flex; flex-wrap:wrap; align-items:center; }
+        .menu a { color:#fff; margin-right:20px; text-decoration:none; font-weight:bold; }
+        .menu a:hover { text-decoration:underline; }
+        .menu span { margin-left:auto; color:#fff; font-weight:bold; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="menu">
+        <a href="/">Home</a>
+        {% if current_user and current_user.designation_id == 1 %}<a href="/employees">Employees</a>{% endif %}
+        <a href="/tasks">Tasks</a>
+        <a href="/tasks/assign">Assign Task</a>
+        <a href="/tasks/report">Task Report</a>
+        <span>{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
+    </div>
+    <h1>Copy Task #{{ original.id }}</h1>
+    <form method="POST">
+        <label>Name:</label>
+        <input type="text" name="name" value="{{ original.name }} (Copy)" required>
+        <label>Category:</label>
+        <select name="category" required>
+            <option value="personal" {% if original.category=='personal' %}selected{% endif %}>Personal</option>
+            <option value="team" {% if original.category=='team' %}selected{% endif %}>Team</option>
+        </select>
+        <label>Type:</label>
+        <input type="text" name="type" value="{{ original.type }}" required>
+        <label>Start Date:</label>
+        <input type="date" name="start_date" value="{{ original.start_date }}" required>
+        <label>End Date:</label>
+        <input type="date" name="end_date" value="{{ original.end_date }}" required>
+        <label>Target:</label>
+        <input type="number" name="target" min="1" value="{{ original.target }}" required>
+        <label>Status:</label>
+        <select name="status" required>
+            <option value="todo">To Do</option>
+            <option value="in progress" {% if original.status=='in progress' %}selected{% endif %}>In Progress</option>
+            <option value="completed" {% if original.status=='completed' %}selected{% endif %}>Completed</option>
+            <option value="blocked" {% if original.status=='blocked' %}selected{% endif %}>Blocked</option>
+        </select>
+        <label>Initial Progress (default 0):</label>
+        <input type="number" name="current_progress" min="0" value="0" required>
+        <label>Assign To:</label>
+        <select name="assigned_to" required>
+            {% for emp in employees %}
+            <option value="{{ emp.id }}" {% if emp.id == original.assigned_to %}selected{% endif %}>{{ emp.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Create Copy</button>
+    </form>
+    <a href="/tasks" style="display:inline-block; margin-top:16px;">Back to Tasks</a>
+</div>
+</body>
+</html>

@@ -3,6 +3,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from passlib.hash import bcrypt
 import hashlib
+import json
 
 PG_HOST = os.getenv('PG_HOST','localhost')
 PG_PORT = os.getenv('PG_PORT','5432')
@@ -87,9 +88,14 @@ def get_employee_by_email_and_password(email,password):
 def create_task(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, current_progress=0):
     with connect_db() as conn, conn.cursor() as cur:
         cur.execute('''INSERT INTO tasks (name,category,type,start_date,end_date,target,status,assigned_by,assigned_to,current_progress)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''',
                     (name,category,type_,start_date,end_date,target,status,assigned_by,assigned_to,current_progress))
+        task_id = cur.fetchone()[0]
+        payload = json.dumps({'name':name,'category':category,'type':type_,'start_date':str(start_date),'end_date':str(end_date),'target':target,'current_progress':current_progress,'status':status,'assigned_by':assigned_by,'assigned_to':assigned_to})
+        cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                       VALUES (%s,'create','ALL',NULL,%s,%s)''',(task_id,payload,assigned_by))
         conn.commit()
+    return task_id
 
 def get_tasks_for_employee(employee_id):
     with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -101,9 +107,19 @@ def get_task(task_id):
         cur.execute('SELECT * FROM tasks WHERE id=%s',(task_id,))
         return cur.fetchone()
 
-def update_task_progress_and_status(task_id, current_progress, status):
+def update_task_progress_and_status(task_id, current_progress, status, changed_by=None):
     with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('SELECT current_progress, status FROM tasks WHERE id=%s',(task_id,))
+        old_row = cur.fetchone()
         cur.execute('UPDATE tasks SET current_progress=%s, status=%s WHERE id=%s',(current_progress,status,task_id))
+        if changed_by and old_row:
+            old_progress, old_status = old_row
+            if str(old_progress) != str(current_progress):
+                cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                               VALUES (%s,'update','current_progress',%s,%s,%s)''', (task_id, str(old_progress), str(current_progress), changed_by))
+            if str(old_status) != str(status):
+                cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                               VALUES (%s,'update','status',%s,%s,%s)''', (task_id, str(old_status), str(status), changed_by))
         conn.commit()
 
 def get_tasks_by_employee(employee_id):
@@ -128,8 +144,48 @@ def get_lower_designation_ids(designation_id):
     ids = get_children(designation_id)
     return ids
 
-def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress):
+def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, changed_by):
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('SELECT name, category, type, start_date, end_date, target, status, assigned_to, current_progress, assigned_by FROM tasks WHERE id=%s',(task_id,))
+        old = cur.fetchone()
     with connect_db() as conn, conn.cursor() as cur:
         cur.execute('''UPDATE tasks SET name=%s, category=%s, type=%s, start_date=%s, end_date=%s, target=%s, status=%s, assigned_to=%s, current_progress=%s WHERE id=%s''',
                     (name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, task_id))
+        if old:
+            new_vals = {'name':name,'category':category,'type':type_,'start_date':str(start_date),'end_date':str(end_date),'target':target,'status':status,'assigned_to':assigned_to,'current_progress':current_progress}
+            for k,v in new_vals.items():
+                if str(old.get(k)) != str(v):
+                    cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                                   VALUES (%s,'update',%s,%s,%s,%s)''', (task_id, k, str(old.get(k)), str(v), changed_by))
+        conn.commit()
+
+def log_task_copy(original_task, new_task_id, changed_by):
+    with connect_db() as conn, conn.cursor() as cur:
+        payload = json.dumps({'copied_from': original_task['id']})
+        cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                       VALUES (%s,'copy','source',%s,%s,%s)''',(new_task_id,str(original_task['id']),payload,changed_by))
+        conn.commit()
+
+def get_task_audit(task_id):
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('''SELECT id, task_id, action, field_name, old_value, new_value, changed_by, changed_at
+                       FROM task_audit WHERE task_id=%s ORDER BY changed_at ASC, id ASC''',(task_id,))
+        return cur.fetchall()
+
+def ensure_sequences():
+    # Reset sequences to max(id) so nextval does not collide
+    with connect_db() as conn, conn.cursor() as cur:
+        for table, seq in [
+            ('designations','designations_id_seq'),
+            ('branches','branches_id_seq'),
+            ('employees','employees_id_seq'),
+            ('tasks','tasks_id_seq'),
+            ('task_audit','task_audit_id_seq')
+        ]:
+            try:
+                cur.execute(f"SELECT COALESCE(MAX(id),0) FROM {table}")
+                max_id = cur.fetchone()[0]
+                cur.execute(f"SELECT setval('{seq}', %s)", (max_id,))
+            except Exception:
+                pass
         conn.commit()

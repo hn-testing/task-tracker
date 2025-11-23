@@ -4,6 +4,7 @@ import sqlite3
 import os
 from passlib.hash import bcrypt
 import hashlib
+import json
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'task_tracker.db')
 def connect_db():
@@ -105,8 +106,25 @@ def create_task(name, category, type, start_date, end_date, target, status, assi
         INSERT INTO tasks (name, category, type, start_date, end_date, target, status, assigned_by, assigned_to, current_progress)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (name, category, type, start_date, end_date, target, status, assigned_by, assigned_to, current_progress))
+    task_id = cur.lastrowid
+    # Audit log aggregated create
+    payload = json.dumps({
+        'name': name,
+        'category': category,
+        'type': type,
+        'start_date': start_date,
+        'end_date': end_date,
+        'target': target,
+        'current_progress': current_progress,
+        'status': status,
+        'assigned_by': assigned_by,
+        'assigned_to': assigned_to
+    })
+    cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by) VALUES (?, 'create', 'ALL', NULL, ?, ?)''',
+                (task_id, payload, assigned_by))
     conn.commit()
     conn.close()
+    return task_id
 
 
 def get_tasks_for_employee(employee_id):
@@ -130,25 +148,79 @@ def update_task_progress(task_id, current_progress):
     conn.close()
 
 
-def update_task_progress_and_status(task_id, current_progress, status):
+def update_task_progress_and_status(task_id, current_progress, status, changed_by=None):
     conn = connect_db()
     cur = conn.cursor()
+    # Fetch old values for audit
+    cur.execute('SELECT current_progress, status FROM tasks WHERE id = ?', (task_id,))
+    old_row = cur.fetchone()
     cur.execute('''
         UPDATE tasks SET current_progress = ?, status = ? WHERE id = ?
     ''', (current_progress, status, task_id))
+    # Audit logging if changed_by provided
+    if changed_by and old_row:
+        old_progress, old_status = old_row
+        if str(old_progress) != str(current_progress):
+            cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                           VALUES (?, 'update', 'current_progress', ?, ?, ?)''',
+                        (task_id, str(old_progress), str(current_progress), changed_by))
+        if str(old_status) != str(status):
+            cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                           VALUES (?, 'update', 'status', ?, ?, ?)''',
+                        (task_id, str(old_status), str(status), changed_by))
     conn.commit()
     conn.close()
 
-def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress):
+def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, changed_by):
     conn = connect_db()
     cur = conn.cursor()
+    # Fetch existing for audit diff
+    cur.execute('SELECT name, category, type, start_date, end_date, target, status, assigned_to, current_progress FROM tasks WHERE id = ?', (task_id,))
+    row = cur.fetchone()
+    old = None
+    if row:
+        cols = ['name','category','type','start_date','end_date','target','status','assigned_to','current_progress']
+        old = dict(zip(cols,row))
     cur.execute('''
         UPDATE tasks
         SET name = ?, category = ?, type = ?, start_date = ?, end_date = ?, target = ?, status = ?, assigned_to = ?, current_progress = ?
         WHERE id = ?
     ''', (name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, task_id))
+    # Audit changes field-wise if old exists
+    if old:
+        new_vals = {
+            'name': name,
+            'category': category,
+            'type': type_,
+            'start_date': start_date,
+            'end_date': end_date,
+            'target': target,
+            'status': status,
+            'assigned_to': assigned_to,
+            'current_progress': current_progress
+        }
+        for k,v in new_vals.items():
+            if str(old.get(k)) != str(v):
+                cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                               VALUES (?, 'update', ?, ?, ?, ?)''', (task_id, k, str(old.get(k)), str(v), changed_by))
     conn.commit()
     conn.close()
+
+def log_task_copy(original_task, new_task_id, changed_by):
+    conn = connect_db()
+    cur = conn.cursor()
+    payload = json.dumps({'copied_from': original_task['id']})
+    cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                   VALUES (?, 'copy', 'source', ?, ?, ?)''', (new_task_id, str(original_task['id']), payload, changed_by))
+    conn.commit(); conn.close()
+
+def get_task_audit(task_id):
+    conn = connect_db(); cur = conn.cursor()
+    cur.execute('''SELECT id, task_id, action, field_name, old_value, new_value, changed_by, changed_at
+                   FROM task_audit WHERE task_id = ? ORDER BY changed_at ASC, id ASC''', (task_id,))
+    rows = cur.fetchall(); cols=[c[0] for c in cur.description]
+    conn.close()
+    return [dict(zip(cols,r)) for r in rows]
 
 
 def get_task(task_id):

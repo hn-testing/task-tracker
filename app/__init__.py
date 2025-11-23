@@ -25,6 +25,9 @@ def create_app():
     # Initialize DB and add dummy data only once at app startup
     try:
         database.init_db()
+        # Postgres sequence alignment
+        if db_type == 'postgres' and hasattr(database,'ensure_sequences'):
+            database.ensure_sequences()
         conn = database.connect_db()
     except Exception as e:
         print(f"[ERROR] Database initialization failed: {e}")
@@ -32,13 +35,25 @@ def create_app():
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM designations')
     if cur.fetchone()[0] == 0:
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('CEO', None))
-        ceo_id = cur.lastrowid
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Head of Department', ceo_id))
-        hod_id = cur.lastrowid
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Manager', hod_id))
-        manager_id = cur.lastrowid
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Staff', manager_id))
+        if db_type == 'postgres':
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('CEO', None))
+            cur.execute('SELECT id FROM designations WHERE title=%s', ('CEO',))
+            ceo_id = cur.fetchone()[0]
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Head of Department', ceo_id))
+            cur.execute('SELECT id FROM designations WHERE title=%s', ('Head of Department',))
+            hod_id = cur.fetchone()[0]
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Manager', hod_id))
+            cur.execute('SELECT id FROM designations WHERE title=%s', ('Manager',))
+            manager_id = cur.fetchone()[0]
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
+        else:
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('CEO', None))
+            ceo_id = cur.lastrowid
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Head of Department', ceo_id))
+            hod_id = cur.lastrowid
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Manager', hod_id))
+            manager_id = cur.lastrowid
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Staff', manager_id))
         conn.commit()
     conn.close()
 
@@ -224,8 +239,16 @@ def create_app():
     def update_task_progress(task_id):
         current_progress = int(request.form['current_progress'])
         status = request.form['status']
-        from app.db import database
-        database.update_task_progress_and_status(task_id, current_progress, status)
+        # Use already selected backend (do not re-import sqlite version)
+        task = database.get_task(task_id)
+        if task:
+            # Basic validation bounds
+            if current_progress < 0:
+                current_progress = 0
+            if task.get('target') and current_progress > task['target']:
+                current_progress = task['target']
+            changed_by = session.get('user_id')
+            database.update_task_progress_and_status(task_id, current_progress, status, changed_by)
         return redirect(url_for('tasks'))
 
     @app.route('/tasks/edit/<int:task_id>', methods=['GET','POST'])
@@ -250,12 +273,53 @@ def create_app():
             status = request.form['status']
             current_progress = int(request.form['current_progress'])
             assigned_to = int(request.form['assigned_to'])
-            database.update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress)
+            database.update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, current_user['id'])
             return redirect(url_for('tasks'))
         # annotate for display
         assigned_to_emp = next((e for e in employees if e['id']==task['assigned_to']), None)
         assigned_to_name = assigned_to_emp['name'] if assigned_to_emp else task['assigned_to']
         return render_template('edit_task.html', task=task, employees=employees, assigned_to_name=assigned_to_name, current_user=current_user)
+
+    @app.route('/tasks/copy/<int:task_id>', methods=['GET','POST'])
+    def copy_task(task_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        original = database.get_task(task_id)
+        if not original:
+            return redirect(url_for('tasks'))
+        current_user = database.get_employee(session['user_id'])
+        employees = database.get_employees()
+        if request.method == 'POST':
+            name = request.form['name']
+            category = request.form['category']
+            type_ = request.form['type']
+            start_date = request.form['start_date']
+            end_date = request.form['end_date']
+            target = int(request.form['target'])
+            status = request.form['status']
+            assigned_to = int(request.form['assigned_to'])
+            # progress reset to 0 for new copy unless overridden
+            current_progress = int(request.form.get('current_progress', 0))
+            new_task_id = database.create_task(name, category, type_, start_date, end_date, target, status, current_user['id'], assigned_to, current_progress=current_progress)
+            try:
+                database.log_task_copy(original, new_task_id, current_user['id'])
+            except Exception:
+                pass
+            return redirect(url_for('tasks'))
+        return render_template('copy_task.html', original=original, employees=employees, current_user=current_user)
+
+    @app.route('/tasks/audit/<int:task_id>')
+    def task_audit(task_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        audits = database.get_task_audit(task_id)
+        employees = database.get_employees()
+        emp_map = {e['id']: e['name'] for e in employees}
+        for a in audits:
+            a['changed_by_name'] = emp_map.get(a['changed_by'], a['changed_by'])
+        task = database.get_task(task_id)
+        current_user = database.get_employee(session['user_id'])
+        return render_template('audit_task.html', audits=audits, task=task, current_user=current_user)
 
     @app.route('/tasks/report', methods=['GET'])
     def task_report():
