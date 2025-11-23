@@ -90,6 +90,16 @@ Simple Flask app with task tracking, audit trail, copy, export, and edit feature
 1. Install dependencies: `pip install -r requirements.txt`
 2. Run the app: `python app.py`
 
+### Deployment Notes
+
+- The server reads the `PORT` environment variable (defaults to `5000`) and binds to `0.0.0.0`, making it deployment friendly.
+- Example using Gunicorn:
+   ```bash
+   export PORT=8000
+   gunicorn -w 4 -b 0.0.0.0:${PORT} app:app
+   ```
+   Adjust worker count to match your CPU resources.
+
 ## Bulk Upload
 
 ### Task Upload
