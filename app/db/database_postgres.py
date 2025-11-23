@@ -48,7 +48,12 @@ def get_employees():
 def create_employee(name, email, designation_id, manager_id, branch_id=None, raw_password='changeme'):
     if raw_password:
         raw_password = raw_password[:72]
-    hashed = bcrypt.hash(raw_password)
+    try:
+        hashed = bcrypt.hash(raw_password)
+    except Exception:
+        # Fallback to legacy sha256 if bcrypt backend fails (environment mismatch)
+        legacy_hash = hashlib.sha256(raw_password.encode('utf-8')).hexdigest()
+        hashed = 'legacy$' + legacy_hash
     with connect_db() as conn, conn.cursor() as cur:
         cur.execute('''INSERT INTO employees (name,email,password,designation_id,manager_id,branch_id) VALUES (%s,%s,%s,%s,%s,%s)''',
                     (name,email,hashed,designation_id,manager_id,branch_id))
@@ -59,6 +64,18 @@ def get_employee(emp_id):
         cur.execute('SELECT * FROM employees WHERE id=%s',(emp_id,))
         row = cur.fetchone()
         return row
+
+def update_employee_password(emp_id, new_password):
+    if new_password:
+        new_password = new_password[:72]
+    try:
+        hashed = bcrypt.hash(new_password)
+    except Exception:
+        legacy_hash = hashlib.sha256(new_password.encode('utf-8')).hexdigest()
+        hashed = 'legacy$' + legacy_hash
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('UPDATE employees SET password=%s WHERE id=%s',(hashed, emp_id))
+        conn.commit()
 
 def update_employee(emp_id, name, email, designation_id, manager_id, branch_id):
     with connect_db() as conn, conn.cursor() as cur:

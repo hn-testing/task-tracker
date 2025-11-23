@@ -65,9 +65,16 @@
             <a href="/tasks">Tasks</a>
             <a href="/tasks/assign">Assign Task</a>
             <a href="/tasks/report">Task Report</a>
+            <a href="/change_password">Change Password</a>
             <span style="float:right; color:#fff; font-weight:bold;">{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
         </div>
         <h1>Employee Management</h1>
+        {% if current_user and current_user.designation_id == 1 %}
+        <div style="margin-bottom:16px; display:flex; gap:16px; flex-wrap:wrap;">
+            <a href="/employees/upload" style="display:inline-block;">Upload Employees</a>
+            <a href="/employees/template" style="display:inline-block;">Download Employee Template</a>
+        </div>
+        {% endif %}
         {% if error %}
         <div style="color: red; margin-bottom: 10px;">{{ error }}</div>
         {% endif %}
@@ -138,6 +145,7 @@
                     {% for manager in valid_managers %}
                     <option value="{{ manager.id }}">{{ manager.name }}</option>
                     <option value="{{ manager.name }}">{{ manager.name }}</option>
+                    <option value="{{ manager.email }}">{{ manager.email }}</option>
                     {% endfor %}
                 </datalist>
             </div>
@@ -147,8 +155,13 @@
                 <datalist id="branch_list">
                     {% for branch in branches %}
                     <option value="{{ branch.id }}">{{ branch.name }}</option>
+                    <option value="{{ branch.name }}">{{ branch.name }}</option>
                     {% endfor %}
                 </datalist>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" name="password" id="password" placeholder="(leave blank for changeme)">
             </div>
             <button type="submit">Submit</button>
         </form>

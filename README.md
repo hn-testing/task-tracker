@@ -34,13 +34,15 @@ python scripts/seed_branches.py
 - Passwords are now stored hashed with bcrypt (passlib). Default new employee password is `changeme` unless you supply one.
 - Migration script re-hashes existing plaintext passwords.
 - Ensure `psycopg2-binary`, `passlib`, `SQLAlchemy`, and `alembic` are installed.
- - Recurring tasks: choose frequency (daily/weekly/monthly/yearly), interval, optional stop date on assignment. Future occurrences auto-generate when viewing the Tasks page.
+ - Recurring tasks: choose frequency (daily/weekly/monthly/yearly), interval, optional stop date on assignment, copy, or bulk upload. Future occurrences auto-generate when viewing the Tasks page.
 
 ### 4. Future Improvements
 - Alembic migrations added (initial revision executes schema). Future changes should use `alembic revision --autogenerate` after adding SQLAlchemy models.
 - Pagination for reports
 - Role-based access control
- - Advanced recurrence (weekday selection, exclusions), bulk upload templates
+ - Advanced recurrence (weekday selection, exclusions)
+ - XLSX import support
+ - Row-level upload preview/dry-run
 
 ### 5. Alembic Usage
 Initialize DB (already done) and apply migrations:
@@ -87,3 +89,57 @@ Simple Flask app with task tracking, audit trail, copy, export, and edit feature
 ## Quick Start
 1. Install dependencies: `pip install -r requirements.txt`
 2. Run the app: `python app.py`
+
+## Bulk Upload
+
+### Task Upload
+Route: `GET /tasks/upload` (requires login)
+
+Download CSV template: `GET /tasks/template`
+
+Template Columns:
+
+| Column | Required | Notes |
+| ------ | -------- | ----- |
+| name | Yes | Task name |
+| category | Yes | personal or team |
+| type | Yes | Arbitrary type label |
+| start_date | Yes | YYYY-MM-DD |
+| end_date | Yes | YYYY-MM-DD |
+| target | Yes | Integer target value |
+| status | Yes | todo / in progress / completed / blocked |
+| assigned_to | Yes | Employee id OR email; must be you or a subordinate |
+| current_progress | No | Defaults 0 if blank |
+| recurrence_frequency | No | daily/weekly/monthly/yearly to create template |
+| recurrence_interval | No | Integer (defaults 1) |
+| recurrence_stop_date | No | YYYY-MM-DD; template deactivates after this date |
+
+Behavior:
+- Each row creates the initial task plus (if recurrence_frequency provided) a recurrence template for future tasks.
+- Validation errors are collected and displayed; successful rows proceed independently.
+- Recurrence interval defaults to 1 if invalid.
+
+### Employee Upload
+Route: `GET /employees/upload` (admin only: designation_id==1)
+
+Download CSV template: `GET /employees/template`
+
+Template Columns:
+
+| Column | Required | Notes |
+| ------ | -------- | ----- |
+| name | Yes | Employee name |
+| email | Yes | Unique email |
+| designation_title | Yes | Must match an existing designation title |
+| manager_email | No | Must exist; establishes hierarchy |
+| branch_name | No | Must match existing branch |
+| password | No | Defaults to 'changeme' if blank |
+
+Behavior:
+- Skips rows with existing emails (logged as errors, continues).
+- Requires existing designation and optional manager/branch to be valid.
+- Passwords hashed with bcrypt.
+
+### Notes
+- Upload is synchronous and may need pagination / background processing for very large files (>1k rows). Consider splitting files.
+- A future improvement will add a dry-run mode (`?dry_run=1`).

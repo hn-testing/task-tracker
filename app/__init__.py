@@ -64,11 +64,32 @@ def create_app():
         name = request.form['name']
         email = request.form['email']
         designation_id = int(request.form['designation_id'])
-        manager_id = request.form.get('manager_id') or None
-        branch_id = request.form.get('branch_id') or None
+        manager_raw = request.form.get('manager_id') or None
+        branch_raw = request.form.get('branch_id') or None
+        password = request.form.get('password') or 'changeme'
+        # Resolve manager id allowing either numeric id or name/email
+        manager_id = None
+        if manager_raw:
+            if manager_raw.isdigit():
+                manager_id = int(manager_raw)
+            else:
+                emps = database.get_employees()
+                match_emp = next((e for e in emps if e['name'].lower() == manager_raw.lower() or e['email'].lower() == manager_raw.lower()), None)
+                if match_emp:
+                    manager_id = match_emp['id']
+        # Resolve branch id allowing either numeric id or branch name
+        branch_id = None
+        if branch_raw:
+            if branch_raw.isdigit():
+                branch_id = int(branch_raw)
+            else:
+                branches_list = database.get_branches()
+                match_branch = next((b for b in branches_list if b['name'].lower() == branch_raw.lower()), None)
+                if match_branch:
+                    branch_id = match_branch['id']
         error = None
         try:
-            database.create_employee(name, email, designation_id, int(manager_id) if manager_id else None, int(branch_id) if branch_id else None)
+            database.create_employee(name, email, designation_id, manager_id, branch_id, raw_password=password)
         except Exception:
             error = 'An error occurred while creating the employee.'
         employees = database.get_employees()
@@ -120,6 +141,35 @@ def create_app():
     def logout():
         session.clear()
         return redirect(url_for('login'))
+
+    @app.route('/change_password', methods=['GET','POST'])
+    def change_password():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        current_user = database.get_employee(session['user_id'])
+        error = None
+        success = None
+        if request.method == 'POST':
+            current_pw = request.form.get('current_password','')
+            new_pw = request.form.get('new_password','')
+            confirm_pw = request.form.get('confirm_password','')
+            # Verify current password
+            if not database.get_employee_by_email_and_password(current_user['email'], current_pw):
+                error = 'Current password incorrect.'
+            elif not new_pw:
+                error = 'New password required.'
+            elif new_pw != confirm_pw:
+                error = 'New password and confirmation do not match.'
+            elif len(new_pw) < 6:
+                error = 'New password must be at least 6 characters.'
+            else:
+                try:
+                    if hasattr(database,'update_employee_password'):
+                        database.update_employee_password(current_user['id'], new_pw)
+                        success = 'Password updated successfully.'
+                except Exception:
+                    error = 'Failed to update password.'
+        return render_template('change_password.html', current_user=current_user, error=error, success=success)
 
     @app.route('/tasks', methods=['GET'])
     def tasks():
@@ -193,6 +243,186 @@ def create_app():
         resp.headers['Content-Disposition'] = f"attachment; filename=tasks_export_{datetime.date.today().isoformat()}.csv"
         resp.headers['Content-Type'] = 'text/csv'
         return resp
+
+    @app.route('/tasks/template', methods=['GET'])
+    def tasks_template():
+        import io, csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['name','category','type','start_date','end_date','target','status','assigned_to','current_progress','recurrence_frequency','recurrence_interval','recurrence_stop_date'])
+        from flask import make_response
+        resp = make_response(output.getvalue())
+        resp.headers['Content-Disposition'] = 'attachment; filename=tasks_upload_template.csv'
+        resp.headers['Content-Type'] = 'text/csv'
+        return resp
+
+    @app.route('/employees/template', methods=['GET'])
+    def employees_template():
+        import io, csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['name','email','designation_title','manager_email','branch_name','password'])
+        from flask import make_response
+        resp = make_response(output.getvalue())
+        resp.headers['Content-Disposition'] = 'attachment; filename=employees_upload_template.csv'
+        resp.headers['Content-Type'] = 'text/csv'
+        return resp
+
+    @app.route('/tasks/upload', methods=['GET','POST'])
+    def upload_tasks():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        current_user = database.get_employee(session['user_id'])
+        employees = database.get_employees()
+        subordinate_ids = []
+        if hasattr(database,'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        allowed_assignees = {current_user['id']} | set(subordinate_ids)
+        result = None
+        errors = []
+        if request.method == 'POST':
+            file = request.files.get('file')
+            if not file or file.filename == '':
+                errors.append('No file provided.')
+            else:
+                import csv, io, datetime
+                try:
+                    content = file.read().decode('utf-8')
+                    reader = csv.DictReader(io.StringIO(content))
+                    created = 0
+                    for i,row in enumerate(reader, start=2):
+                        name = row.get('name','').strip()
+                        category = row.get('category','').strip()
+                        type_ = row.get('type','').strip()
+                        start_date = row.get('start_date','').strip()
+                        end_date = row.get('end_date','').strip()
+                        target = row.get('target','').strip()
+                        status = row.get('status','').strip().lower()
+                        assigned_to = row.get('assigned_to','').strip()
+                        current_progress = row.get('current_progress','').strip()
+                        rec_freq = row.get('recurrence_frequency','').strip().lower()
+                        rec_interval_raw = row.get('recurrence_interval','').strip()
+                        rec_stop_date = row.get('recurrence_stop_date','').strip()
+                        if not (name and category in ['personal','team'] and type_ and start_date and end_date and target and status in ['todo','in progress','completed','blocked'] and assigned_to):
+                            errors.append(f'Row {i}: Missing or invalid required fields.')
+                            continue
+                        try:
+                            target_int = int(target)
+                        except Exception:
+                            errors.append(f'Row {i}: target must be integer.')
+                            continue
+                        try:
+                            current_progress_int = int(current_progress) if current_progress else 0
+                        except Exception:
+                            errors.append(f'Row {i}: current_progress must be integer.')
+                            continue
+                        try:
+                            datetime.date.fromisoformat(start_date)
+                            datetime.date.fromisoformat(end_date)
+                        except Exception:
+                            errors.append(f'Row {i}: invalid date format (YYYY-MM-DD expected).')
+                            continue
+                        assigned_to_id = None
+                        if assigned_to.isdigit():
+                            assigned_to_id = int(assigned_to)
+                        else:
+                            match_emp = next((e for e in employees if e['email'].lower()==assigned_to.lower()), None)
+                            if match_emp:
+                                assigned_to_id = match_emp['id']
+                        if not assigned_to_id:
+                            errors.append(f'Row {i}: assigned_to not found.')
+                            continue
+                        if assigned_to_id not in allowed_assignees:
+                            errors.append(f'Row {i}: assigned_to not in your subordinate tree or self.')
+                            continue
+                        new_task_id = None
+                        try:
+                            new_task_id = database.create_task(name, category, type_, start_date, end_date, target_int, status, current_user['id'], assigned_to_id, current_progress=current_progress_int)
+                            created += 1
+                        except Exception:
+                            errors.append(f'Row {i}: DB error creating task.')
+                            continue
+                        # Optional recurrence template creation
+                        if new_task_id and rec_freq in ['daily','weekly','monthly','yearly']:
+                            interval_val = 1
+                            if rec_interval_raw:
+                                try:
+                                    interval_val = int(rec_interval_raw)
+                                except Exception:
+                                    errors.append(f'Row {i}: recurrence_interval invalid, defaulting to 1.')
+                            stop_date_val = rec_stop_date if rec_stop_date else None
+                            try:
+                                if hasattr(database,'create_recurring_template_from_existing'):
+                                    database.create_recurring_template_from_existing(name, category, type_, start_date, end_date, target_int, status, current_user['id'], assigned_to_id, new_task_id, rec_freq, interval_val, stop_date_val)
+                            except Exception:
+                                errors.append(f'Row {i}: failed to create recurrence template.')
+                    result = f"Created {created} task(s)."
+                except Exception:
+                    errors.append('Failed to parse file.')
+        return render_template('upload_tasks.html', current_user=current_user, result=result, errors=errors)
+
+    @app.route('/employees/upload', methods=['GET','POST'])
+    def upload_employees():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        current_user = database.get_employee(session['user_id'])
+        if current_user['designation_id'] != 1:
+            return redirect(url_for('employees'))
+        designations = {d['title']: d['id'] for d in database.get_designations()}
+        employees = database.get_employees()
+        branches = {b['name']: b['id'] for b in database.get_branches()}
+        email_to_id = {e['email'].lower(): e['id'] for e in employees}
+        result = None
+        errors = []
+        if request.method == 'POST':
+            file = request.files.get('file')
+            if not file or file.filename == '':
+                errors.append('No file provided.')
+            else:
+                import csv, io
+                try:
+                    content = file.read().decode('utf-8')
+                    reader = csv.DictReader(io.StringIO(content))
+                    created = 0
+                    for i,row in enumerate(reader, start=2):
+                        name = row.get('name','').strip()
+                        email = row.get('email','').strip()
+                        designation_title = row.get('designation_title','').strip()
+                        manager_email = row.get('manager_email','').strip()
+                        branch_name = row.get('branch_name','').strip()
+                        password = row.get('password','changeme').strip() or 'changeme'
+                        if not (name and email and designation_title):
+                            errors.append(f'Row {i}: missing required fields.')
+                            continue
+                        if email.lower() in email_to_id:
+                            errors.append(f'Row {i}: email already exists, skipped.')
+                            continue
+                        designation_id = designations.get(designation_title)
+                        if not designation_id:
+                            errors.append(f'Row {i}: designation_title not found.')
+                            continue
+                        manager_id = None
+                        if manager_email:
+                            manager_id = email_to_id.get(manager_email.lower())
+                            if not manager_id:
+                                errors.append(f'Row {i}: manager_email not found.')
+                                continue
+                        branch_id = None
+                        if branch_name:
+                            branch_id = branches.get(branch_name)
+                            if not branch_id:
+                                errors.append(f'Row {i}: branch_name not found.')
+                                continue
+                        try:
+                            database.create_employee(name, email, designation_id, manager_id, branch_id, raw_password=password)
+                            created += 1
+                            email_to_id[email.lower()] = -1
+                        except Exception:
+                            errors.append(f'Row {i}: DB error creating employee.')
+                    result = f"Created {created} employee(s)."
+                except Exception:
+                    errors.append('Failed to parse file.')
+        return render_template('upload_employees.html', current_user=current_user, result=result, errors=errors)
 
     @app.route('/tasks/assign', methods=['GET', 'POST'])
     def assign_task():
