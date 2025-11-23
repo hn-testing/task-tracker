@@ -15,14 +15,10 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-db_type = os.getenv('DB_TYPE','sqlite').lower()
-if db_type == 'postgres':
-    pg_url = (
-        f"postgresql://{os.getenv('PG_USER','postgres')}:{os.getenv('PG_PASSWORD','postgres')}@"
-        f"{os.getenv('PG_HOST','localhost')}:{os.getenv('PG_PORT','5432')}/{os.getenv('PG_DB','task_tracker')}"
-    )
-else:
-    pg_url = f"sqlite:///{os.path.join(BASE_DIR,'app','db','task_tracker.db')}"
+pg_url = (
+    f"postgresql://{os.getenv('PG_USER','postgres')}:{os.getenv('PG_PASSWORD','postgres')}@"
+    f"{os.getenv('PG_HOST','localhost')}:{os.getenv('PG_PORT','5432')}/{os.getenv('PG_DB','task_tracker')}"
+)
 config.set_main_option('sqlalchemy.url', pg_url)
 
 def run_migrations_offline() -> None:

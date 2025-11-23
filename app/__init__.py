@@ -3,19 +3,10 @@ import os
 from dotenv import load_dotenv
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 env_path = os.path.join(BASE_DIR, '.env')
-load_dotenv(dotenv_path=env_path)  # Explicit load
+load_dotenv(dotenv_path=env_path)
 
-db_type = os.getenv('DB_TYPE','sqlite').lower()
-try:
-    if db_type == 'postgres':
-        from app.db import database_postgres as database
-    else:
-        from app.db import database
-except Exception as e:
-    # Fallback to sqlite with warning
-    from app.db import database as database
-    print(f"[WARN] Failed to initialize selected DB backend '{db_type}': {e}. Falling back to sqlite.")
-import os
+# Postgres only
+from app.db import database_postgres as database
 
 def create_app():
     app = Flask(__name__)
@@ -25,8 +16,7 @@ def create_app():
     # Initialize DB and add dummy data only once at app startup
     try:
         database.init_db()
-        # Postgres sequence alignment
-        if db_type == 'postgres' and hasattr(database,'ensure_sequences'):
+        if hasattr(database,'ensure_sequences'):
             database.ensure_sequences()
         conn = database.connect_db()
     except Exception as e:
@@ -35,25 +25,16 @@ def create_app():
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM designations')
     if cur.fetchone()[0] == 0:
-        if db_type == 'postgres':
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('CEO', None))
-            cur.execute('SELECT id FROM designations WHERE title=%s', ('CEO',))
-            ceo_id = cur.fetchone()[0]
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Head of Department', ceo_id))
-            cur.execute('SELECT id FROM designations WHERE title=%s', ('Head of Department',))
-            hod_id = cur.fetchone()[0]
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Manager', hod_id))
-            cur.execute('SELECT id FROM designations WHERE title=%s', ('Manager',))
-            manager_id = cur.fetchone()[0]
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
-        else:
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('CEO', None))
-            ceo_id = cur.lastrowid
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Head of Department', ceo_id))
-            hod_id = cur.lastrowid
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Manager', hod_id))
-            manager_id = cur.lastrowid
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (?, ?)', ('Staff', manager_id))
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('CEO', None))
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('CEO',))
+        ceo_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Head of Department', ceo_id))
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('Head of Department',))
+        hod_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Manager', hod_id))
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('Manager',))
+        manager_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
         conn.commit()
     conn.close()
 
@@ -88,12 +69,8 @@ def create_app():
         error = None
         try:
             database.create_employee(name, email, designation_id, int(manager_id) if manager_id else None, int(branch_id) if branch_id else None)
-        except Exception as e:
-            import sqlite3
-            if isinstance(e, sqlite3.IntegrityError) and 'UNIQUE constraint failed: employees.email' in str(e):
-                error = 'Employee with this email already exists.'
-            else:
-                error = 'An error occurred while creating the employee.'
+        except Exception:
+            error = 'An error occurred while creating the employee.'
         employees = database.get_employees()
         designations = database.get_designations()
         valid_managers = employees
@@ -239,7 +216,7 @@ def create_app():
     def update_task_progress(task_id):
         current_progress = int(request.form['current_progress'])
         status = request.form['status']
-        # Use already selected backend (do not re-import sqlite version)
+        # Update task progress/status using active Postgres backend
         task = database.get_task(task_id)
         if task:
             # Basic validation bounds
