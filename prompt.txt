@@ -1,0 +1,16 @@
+
+task id should be shown on task page
+
+edit button on the task grids which can be used to edit the task details 
+
+Assign To (Employee): on task assign screen should display name instead of id, keep the search functionality as if, just show name instead of id in textbox
+
+tasks can be exported
+
+
+
+show audit trail of all the changes to the tasks (who changed what and when)
+
+add copy task functionlity
+
+tasks can be recurring (daily, weekly, monthly yearly)

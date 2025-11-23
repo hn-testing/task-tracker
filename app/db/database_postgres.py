@@ -127,3 +127,9 @@ def get_lower_designation_ids(designation_id):
         return all_children
     ids = get_children(designation_id)
     return ids
+
+def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress):
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('''UPDATE tasks SET name=%s, category=%s, type=%s, start_date=%s, end_date=%s, target=%s, status=%s, assigned_to=%s, current_progress=%s WHERE id=%s''',
+                    (name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, task_id))
+        conn.commit()

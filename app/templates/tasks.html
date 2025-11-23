@@ -44,9 +44,13 @@
             <span style="float:right; color:#fff; font-weight:bold;">{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
         </div>
         <h1>All Tasks</h1>
-        <a href="/tasks/assign" style="margin-bottom: 16px; display: inline-block;">Assign New Task</a>
+        <div style="margin-bottom:16px; display:flex; gap:20px; flex-wrap:wrap;">
+            <a href="/tasks/assign" style="display:inline-block;">Assign New Task</a>
+            <a href="/tasks/export" style="display:inline-block;">Export CSV</a>
+        </div>
         <table>
             <tr>
+                <th>ID</th>
                 <th>Name</th>
                 <th>Category</th>
                 <th>Type</th>
@@ -59,9 +63,11 @@
                 <th>Assigned By</th>
                 <th>Assigned To</th>
                 <th>Update</th>
+                <th>Edit</th>
             </tr>
             {% for task in tasks %}
             <tr>
+                <td>{{ task['id'] }}</td>
                 <td>{{ task['name'] }}</td>
                 <td>{{ task['category'] }}</td>
                 <td>{{ task['type'] }}</td>
@@ -85,12 +91,18 @@
                         <button type="submit">Update</button>
                     </form>
                 </td>
+                <td>
+                    {% if current_user and (current_user.id == task['assigned_by'] or current_user.designation_id == 1) %}
+                    <a href="/tasks/edit/{{ task['id'] }}">Edit</a>
+                    {% else %}-{% endif %}
+                </td>
             </tr>
             {% endfor %}
         </table>
         <h2 style="margin-top:40px;">Subordinate Tasks</h2>
         <table>
             <tr>
+                <th>ID</th>
                 <th>Name</th>
                 <th>Category</th>
                 <th>Type</th>
@@ -102,9 +114,11 @@
                 <th>Progress (%)</th>
                 <th>Assigned By</th>
                 <th>Assigned To</th>
+                <th>Edit</th>
             </tr>
             {% for task in subordinate_tasks %}
             <tr>
+                <td>{{ task['id'] }}</td>
                 <td>{{ task['name'] }}</td>
                 <td>{{ task['category'] }}</td>
                 <td>{{ task['type'] }}</td>
@@ -116,6 +130,11 @@
                 <td>{{ '%.2f'|format(task['progress']) }}</td>
                 <td>{{ task['assigned_by_name'] }}</td>
                 <td>{{ task['employee_name'] }}</td>
+                <td>
+                    {% if current_user and (current_user.id == task['assigned_by'] or current_user.designation_id == 1) %}
+                    <a href="/tasks/edit/{{ task['id'] }}">Edit</a>
+                    {% else %}-{% endif %}
+                </td>
             </tr>
             {% endfor %}
         </table>

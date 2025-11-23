@@ -151,6 +151,43 @@ def create_app():
                 subordinate_tasks.append(t)
         return render_template('tasks.html', tasks=all_tasks, employees=employees, current_user=current_user, subordinate_tasks=subordinate_tasks)
 
+    @app.route('/tasks/export', methods=['GET'])
+    def export_tasks():
+        if 'user_email' not in session:
+            return redirect(url_for('login'))
+        user_id = session['user_id']
+        employees = database.get_employees()
+        current_user = database.get_employee(user_id)
+        # own tasks
+        own_tasks = database.get_tasks_by_employee(user_id)
+        for t in own_tasks:
+            t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+        # subordinate tasks
+        lower_designation_ids = database.get_lower_designation_ids(current_user['designation_id'])
+        subordinates = [e for e in employees if e['designation_id'] in lower_designation_ids]
+        subordinate_tasks = []
+        for emp in subordinates:
+            emp_tasks = database.get_tasks_by_employee(emp['id'])
+            for t in emp_tasks:
+                t['employee_name'] = emp['name']
+                t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+                subordinate_tasks.append(t)
+        all_export_tasks = own_tasks + subordinate_tasks
+        import csv, io, datetime
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['id','name','category','type','start_date','end_date','target','current_progress','status','progress_percent','assigned_by_name','employee_name'])
+        for t in all_export_tasks:
+            writer.writerow([
+                t.get('id'), t.get('name'), t.get('category'), t.get('type'), t.get('start_date'), t.get('end_date'),
+                t.get('target'), t.get('current_progress'), t.get('status'), f"{t.get('progress',0):.2f}", t.get('assigned_by_name'), t.get('employee_name')
+            ])
+        from flask import make_response
+        resp = make_response(output.getvalue())
+        resp.headers['Content-Disposition'] = f"attachment; filename=tasks_export_{datetime.date.today().isoformat()}.csv"
+        resp.headers['Content-Type'] = 'text/csv'
+        return resp
+
     @app.route('/tasks/assign', methods=['GET', 'POST'])
     def assign_task():
         if 'user_id' not in session:
@@ -190,6 +227,35 @@ def create_app():
         from app.db import database
         database.update_task_progress_and_status(task_id, current_progress, status)
         return redirect(url_for('tasks'))
+
+    @app.route('/tasks/edit/<int:task_id>', methods=['GET','POST'])
+    def edit_task(task_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        task = database.get_task(task_id)
+        if not task:
+            return redirect(url_for('tasks'))
+        current_user = database.get_employee(session['user_id'])
+        # Permission check: Only creator (assigned_by) or top designation (id==1)
+        if not (current_user['id'] == task['assigned_by'] or current_user['designation_id'] == 1):
+            return redirect(url_for('tasks'))
+        employees = database.get_employees()
+        if request.method == 'POST':
+            name = request.form['name']
+            category = request.form['category']
+            type_ = request.form['type']
+            start_date = request.form['start_date']
+            end_date = request.form['end_date']
+            target = int(request.form['target'])
+            status = request.form['status']
+            current_progress = int(request.form['current_progress'])
+            assigned_to = int(request.form['assigned_to'])
+            database.update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress)
+            return redirect(url_for('tasks'))
+        # annotate for display
+        assigned_to_emp = next((e for e in employees if e['id']==task['assigned_to']), None)
+        assigned_to_name = assigned_to_emp['name'] if assigned_to_emp else task['assigned_to']
+        return render_template('edit_task.html', task=task, employees=employees, assigned_to_name=assigned_to_name, current_user=current_user)
 
     @app.route('/tasks/report', methods=['GET'])
     def task_report():

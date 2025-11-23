@@ -139,6 +139,17 @@ def update_task_progress_and_status(task_id, current_progress, status):
     conn.commit()
     conn.close()
 
+def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress):
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute('''
+        UPDATE tasks
+        SET name = ?, category = ?, type = ?, start_date = ?, end_date = ?, target = ?, status = ?, assigned_to = ?, current_progress = ?
+        WHERE id = ?
+    ''', (name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, task_id))
+    conn.commit()
+    conn.close()
+
 
 def get_task(task_id):
     conn = connect_db()

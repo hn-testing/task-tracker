@@ -80,12 +80,12 @@
             <input type="text" value="{{ current_user.name }}" readonly>
             <input type="hidden" name="assigned_by" value="{{ current_user.id }}">
             <label>Assign To (Employee):</label>
-            <input list="assignable_employees" name="assigned_to" required>
-            <datalist id="assignable_employees">
+            <select name="assigned_to" required>
+                <option value="" disabled selected>-- Select Employee --</option>
                 {% for emp in employees %}
                 <option value="{{ emp.id }}">{{ emp.name }}</option>
                 {% endfor %}
-            </datalist>
+            </select>
             <br>
             <button type="submit">Assign Task</button>
         </form>
