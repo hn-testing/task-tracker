@@ -44,9 +44,20 @@
             <span style="float:right; color:#fff; font-weight:bold;">{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
         </div>
         <h1>All Tasks</h1>
-        <div style="margin-bottom:16px; display:flex; gap:20px; flex-wrap:wrap;">
+        <div style="margin-bottom:16px; display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
             <a href="/tasks/assign" style="display:inline-block;">Assign New Task</a>
             <a href="/tasks/export" style="display:inline-block;">Export CSV</a>
+            <form method="GET" action="/tasks" style="display:flex; align-items:center; gap:8px;">
+                <label for="status_filter" style="font-weight:bold;">Status:</label>
+                <select name="status_filter" id="status_filter" onchange="this.form.submit()" style="padding:6px;">
+                    <option value="all" {% if status_filter=='all' %}selected{% endif %}>All</option>
+                    <option value="todo" {% if status_filter=='todo' %}selected{% endif %}>To Do</option>
+                    <option value="in progress" {% if status_filter=='in progress' %}selected{% endif %}>In Progress</option>
+                    <option value="completed" {% if status_filter=='completed' %}selected{% endif %}>Completed</option>
+                    <option value="blocked" {% if status_filter=='blocked' %}selected{% endif %}>Blocked</option>
+                </select>
+                <noscript><button type="submit">Apply</button></noscript>
+            </form>
         </div>
         <table>
             <tr>

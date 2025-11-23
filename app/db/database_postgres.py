@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 from passlib.hash import bcrypt
 import hashlib
 import json
+from datetime import date, timedelta
 
 PG_HOST = os.getenv('PG_HOST','localhost')
 PG_PORT = os.getenv('PG_PORT','5432')
@@ -144,6 +145,26 @@ def get_lower_designation_ids(designation_id):
     ids = get_children(designation_id)
     return ids
 
+def get_subordinate_employee_ids(manager_id):
+    """Return list of all employee IDs in the managerial tree beneath manager_id.
+
+    Traverses employees via manager_id links (direct + indirect reports)."""
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('SELECT id, manager_id FROM employees')
+        rows = cur.fetchall()
+    children_map = {}
+    for emp_id, mgr in rows:
+        if mgr is None:
+            continue
+        children_map.setdefault(mgr, []).append(emp_id)
+    result = []
+    stack = children_map.get(manager_id, [])[:]
+    while stack:
+        cid = stack.pop()
+        result.append(cid)
+        stack.extend(children_map.get(cid, []))
+    return result
+
 def update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, changed_by):
     with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute('SELECT name, category, type, start_date, end_date, target, status, assigned_to, current_progress, assigned_by FROM tasks WHERE id=%s',(task_id,))
@@ -189,3 +210,97 @@ def ensure_sequences():
             except Exception:
                 pass
         conn.commit()
+
+def _add_months(d: date, months: int) -> date:
+    # Simple month addition without external libs
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    day = min(d.day, [31,
+                      29 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 28,
+                      31,30,31,30,31,31,30,31,30,31][m-1])
+    return date(y, m, day)
+
+def create_recurring_task_template(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, frequency, interval=1, stop_date=None):
+    duration_days = (end_date - start_date).days if isinstance(start_date, date) else 0
+    if isinstance(start_date, str):
+        start_date_obj = date.fromisoformat(start_date)
+    else:
+        start_date_obj = start_date
+    if isinstance(end_date, str):
+        end_date_obj = date.fromisoformat(end_date)
+    else:
+        end_date_obj = end_date
+    # Initial occurrence already created outside or will be created now
+    first_task_id = create_task(name, category, type_, start_date_obj, end_date_obj, target, status, assigned_by, assigned_to, current_progress=0)
+    # Compute next_run_date
+    if frequency == 'daily':
+        next_run = start_date_obj + timedelta(days=interval)
+    elif frequency == 'weekly':
+        next_run = start_date_obj + timedelta(days=7*interval)
+    elif frequency == 'monthly':
+        next_run = _add_months(start_date_obj, interval)
+    else:  # yearly
+        next_run = _add_months(start_date_obj, 12*interval)
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('''INSERT INTO task_recurrence (name,category,type,target,status,assigned_by,assigned_to,frequency,interval,start_date,end_date,next_run_date,stop_date,duration_days,active,last_generated_task_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s) RETURNING id''',
+                    (name,category,type_,target,status,assigned_by,assigned_to,frequency,interval,start_date_obj,end_date_obj,next_run,stop_date,duration_days,first_task_id))
+        rec_id = cur.fetchone()[0]
+        conn.commit()
+    return rec_id
+
+def create_recurring_template_from_existing(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, first_task_id, frequency, interval=1, stop_date=None):
+    """Create a recurrence template pointing to an already created first occurrence.
+
+    This avoids creating a duplicate initial task (the existing create_recurring_task_template
+    function creates a new first occurrence internally). Use this for flows where the
+    initial task has already been persisted (e.g. assignment form or copy form).
+    """
+    # Normalize dates
+    if isinstance(start_date, str):
+        start_date_obj = date.fromisoformat(start_date)
+    else:
+        start_date_obj = start_date
+    if isinstance(end_date, str):
+        end_date_obj = date.fromisoformat(end_date)
+    else:
+        end_date_obj = end_date
+    duration_days = (end_date_obj - start_date_obj).days if isinstance(start_date_obj, date) and isinstance(end_date_obj, date) else 0
+    # Compute next_run_date based on frequency/interval
+    if frequency == 'daily':
+        next_run = start_date_obj + timedelta(days=interval)
+    elif frequency == 'weekly':
+        next_run = start_date_obj + timedelta(days=7 * interval)
+    elif frequency == 'monthly':
+        next_run = _add_months(start_date_obj, interval)
+    else:  # yearly
+        next_run = _add_months(start_date_obj, 12 * interval)
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('''INSERT INTO task_recurrence (name,category,type,target,status,assigned_by,assigned_to,frequency,interval,start_date,end_date,next_run_date,stop_date,duration_days,active,last_generated_task_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,TRUE,%s) RETURNING id''',
+                    (name, category, type_, target, status, assigned_by, assigned_to, frequency, interval, start_date_obj, end_date_obj, next_run, stop_date, duration_days, first_task_id))
+        rec_id = cur.fetchone()[0]
+        conn.commit()
+    return rec_id
+
+def generate_due_recurring_tasks():
+    today = date.today()
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('''SELECT * FROM task_recurrence WHERE active=TRUE AND next_run_date<=%s AND (stop_date IS NULL OR next_run_date<=stop_date)''',(today,))
+        templates = cur.fetchall()
+    for tpl in templates:
+        start_dt = tpl['next_run_date']
+        end_dt = start_dt + timedelta(days=tpl['duration_days'])
+        new_task_id = create_task(tpl['name'], tpl['category'], tpl['type'], start_dt, end_dt, tpl['target'], tpl['status'], tpl['assigned_by'], tpl['assigned_to'], current_progress=0)
+        # advance next_run_date
+        if tpl['frequency'] == 'daily':
+            nxt = start_dt + timedelta(days=tpl['interval'])
+        elif tpl['frequency'] == 'weekly':
+            nxt = start_dt + timedelta(days=7*tpl['interval'])
+        elif tpl['frequency'] == 'monthly':
+            nxt = _add_months(start_dt, tpl['interval'])
+        else:
+            nxt = _add_months(start_dt, 12*tpl['interval'])
+        with connect_db() as conn, conn.cursor() as cur:
+            cur.execute('''UPDATE task_recurrence SET next_run_date=%s, last_generated_task_id=%s WHERE id=%s''',(nxt,new_task_id,tpl['id']))
+            conn.commit()

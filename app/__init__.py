@@ -125,15 +125,24 @@ def create_app():
     def tasks():
         if 'user_email' not in session:
             return redirect(url_for('login'))
+        # Generate due recurring tasks before listing
+        try:
+            if hasattr(database, 'generate_due_recurring_tasks'):
+                database.generate_due_recurring_tasks()
+        except Exception as e:
+            print(f"[WARN] Recurring task generation failed: {e}")
         user_id = session['user_id']
         all_tasks = database.get_tasks_by_employee(user_id)
         employees = database.get_employees()
         current_user = database.get_employee(user_id)
+        status_filter = request.args.get('status_filter','all')
         for t in all_tasks:
             t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
-        # Get subordinate employees
-        lower_designation_ids = database.get_lower_designation_ids(current_user['designation_id'])
-        subordinates = [e for e in employees if e['designation_id'] in lower_designation_ids]
+        # Get subordinates based on managerial tree (not just designation level)
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        subordinates = [e for e in employees if e['id'] in subordinate_ids]
         subordinate_tasks = []
         for emp in subordinates:
             emp_tasks = database.get_tasks_by_employee(emp['id'])
@@ -141,7 +150,10 @@ def create_app():
                 t['employee_name'] = emp['name']
                 t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
                 subordinate_tasks.append(t)
-        return render_template('tasks.html', tasks=all_tasks, employees=employees, current_user=current_user, subordinate_tasks=subordinate_tasks)
+        if status_filter and status_filter != 'all':
+            all_tasks = [t for t in all_tasks if t.get('status') == status_filter]
+            subordinate_tasks = [t for t in subordinate_tasks if t.get('status') == status_filter]
+        return render_template('tasks.html', tasks=all_tasks, employees=employees, current_user=current_user, subordinate_tasks=subordinate_tasks, status_filter=status_filter)
 
     @app.route('/tasks/export', methods=['GET'])
     def export_tasks():
@@ -154,9 +166,11 @@ def create_app():
         own_tasks = database.get_tasks_by_employee(user_id)
         for t in own_tasks:
             t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
-        # subordinate tasks
-        lower_designation_ids = database.get_lower_designation_ids(current_user['designation_id'])
-        subordinates = [e for e in employees if e['designation_id'] in lower_designation_ids]
+        # subordinate tasks via managerial tree
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        subordinates = [e for e in employees if e['id'] in subordinate_ids]
         subordinate_tasks = []
         for emp in subordinates:
             emp_tasks = database.get_tasks_by_employee(emp['id'])
@@ -188,9 +202,10 @@ def create_app():
         error = None
         task_types = ['Sell product1', 'Sell product2', 'Support', 'Demo', 'Other']
         current_user = database.get_employee(session['user_id'])
-        current_designation_id = current_user['designation_id']
-        lower_designation_ids = database.get_lower_designation_ids(current_designation_id)
-        assignable_employees = [e for e in employees if e['designation_id'] in lower_designation_ids]
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        assignable_employees = [current_user] + [e for e in employees if e['id'] in subordinate_ids]
         if request.method == 'POST':
             name = request.form['name']
             category = request.form['category']
@@ -206,7 +221,18 @@ def create_app():
                 error = 'You can only assign tasks to subordinates.'
             else:
                 try:
-                    database.create_task(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, current_progress=current_progress)
+                    task_id = database.create_task(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, current_progress=current_progress)
+                    # Handle recurrence template creation
+                    freq = request.form.get('recurrence_frequency') or ''
+                    interval = int(request.form.get('recurrence_interval') or 1)
+                    stop_date = request.form.get('recurrence_stop_date') or None
+                    if freq in ['daily','weekly','monthly','yearly']:
+                        try:
+                            # Create template referencing the already created first occurrence (avoid duplicate task)
+                            if hasattr(database, 'create_recurring_template_from_existing'):
+                                database.create_recurring_template_from_existing(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, task_id, freq, interval, stop_date)
+                        except Exception as re:
+                            print(f"[WARN] Failed to create recurrence template: {re}")
                     return redirect(url_for('tasks'))
                 except Exception as e:
                     error = 'Error assigning task.'
@@ -239,7 +265,12 @@ def create_app():
         # Permission check: Only creator (assigned_by) or top designation (id==1)
         if not (current_user['id'] == task['assigned_by'] or current_user['designation_id'] == 1):
             return redirect(url_for('tasks'))
-        employees = database.get_employees()
+        # Restrict selectable assignees to self + managerial subordinates
+        all_emps = database.get_employees()
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        employees = [e for e in all_emps if e['id'] == current_user['id'] or e['id'] in subordinate_ids]
         if request.method == 'POST':
             name = request.form['name']
             category = request.form['category']
@@ -250,6 +281,9 @@ def create_app():
             status = request.form['status']
             current_progress = int(request.form['current_progress'])
             assigned_to = int(request.form['assigned_to'])
+            allowed_ids = {e['id'] for e in employees}
+            if assigned_to not in allowed_ids:
+                return redirect(url_for('tasks'))
             database.update_task(task_id, name, category, type_, start_date, end_date, target, status, assigned_to, current_progress, current_user['id'])
             return redirect(url_for('tasks'))
         # annotate for display
@@ -265,7 +299,12 @@ def create_app():
         if not original:
             return redirect(url_for('tasks'))
         current_user = database.get_employee(session['user_id'])
-        employees = database.get_employees()
+        # Allowed assignees: self + managerial subordinates
+        all_emps = database.get_employees()
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        employees = [e for e in all_emps if e['id'] == current_user['id'] or e['id'] in subordinate_ids]
         if request.method == 'POST':
             name = request.form['name']
             category = request.form['category']
@@ -277,11 +316,24 @@ def create_app():
             assigned_to = int(request.form['assigned_to'])
             # progress reset to 0 for new copy unless overridden
             current_progress = int(request.form.get('current_progress', 0))
+            allowed_ids = {e['id'] for e in employees}
+            if assigned_to not in allowed_ids:
+                return redirect(url_for('tasks'))
             new_task_id = database.create_task(name, category, type_, start_date, end_date, target, status, current_user['id'], assigned_to, current_progress=current_progress)
             try:
                 database.log_task_copy(original, new_task_id, current_user['id'])
             except Exception:
                 pass
+            # Optional recurrence for copied task
+            freq = request.form.get('recurrence_frequency') or ''
+            interval = int(request.form.get('recurrence_interval') or 1)
+            stop_date = request.form.get('recurrence_stop_date') or None
+            if freq in ['daily','weekly','monthly','yearly']:
+                try:
+                    if hasattr(database, 'create_recurring_template_from_existing'):
+                        database.create_recurring_template_from_existing(name, category, type_, start_date, end_date, target, status, current_user['id'], assigned_to, new_task_id, freq, interval, stop_date)
+                except Exception as re:
+                    print(f"[WARN] Failed to create recurrence template (copy): {re}")
             return redirect(url_for('tasks'))
         return render_template('copy_task.html', original=original, employees=employees, current_user=current_user)
 

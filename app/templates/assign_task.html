@@ -76,6 +76,21 @@
             </select><br>
             <label>Current Progress:</label>
             <input type="number" name="current_progress" min="0" value="0" required><br>
+            <fieldset style="border:1px solid #ccc; padding:10px; margin-bottom:16px;">
+                <legend>Recurrence (optional)</legend>
+                <label>Frequency:</label>
+                <select name="recurrence_frequency">
+                    <option value="">None</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                </select><br>
+                <label>Interval (e.g. every N units):</label>
+                <input type="number" name="recurrence_interval" min="1" value="1"><br>
+                <label>Stop Date (optional):</label>
+                <input type="date" name="recurrence_stop_date"><br>
+            </fieldset>
             <label>Assign By (Manager):</label>
             <input type="text" value="{{ current_user.name }}" readonly>
             <input type="hidden" name="assigned_by" value="{{ current_user.id }}">

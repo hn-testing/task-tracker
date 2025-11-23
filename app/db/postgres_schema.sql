@@ -43,3 +43,24 @@ CREATE TABLE IF NOT EXISTS task_audit (
     changed_by INTEGER NOT NULL REFERENCES employees(id),
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Recurring task templates
+CREATE TABLE IF NOT EXISTS task_recurrence (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('personal','team')),
+    type TEXT NOT NULL,
+    target INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'todo',
+    assigned_by INTEGER NOT NULL REFERENCES employees(id),
+    assigned_to INTEGER NOT NULL REFERENCES employees(id),
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily','weekly','monthly','yearly')),
+    interval INTEGER NOT NULL DEFAULT 1,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    next_run_date DATE NOT NULL,
+    stop_date DATE NULL,
+    duration_days INTEGER NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_generated_task_id INTEGER NULL REFERENCES tasks(id)
+);

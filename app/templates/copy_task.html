@@ -60,6 +60,21 @@
             <option value="{{ emp.id }}" {% if emp.id == original.assigned_to %}selected{% endif %}>{{ emp.name }}</option>
             {% endfor %}
         </select>
+        <fieldset style="border:1px solid #ccc; padding:10px; margin:16px 0;">
+            <legend>Recurrence (optional)</legend>
+            <label>Frequency:</label>
+            <select name="recurrence_frequency">
+                <option value="">None</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+            </select>
+            <label>Interval (e.g. every N units):</label>
+            <input type="number" name="recurrence_interval" min="1" value="1">
+            <label>Stop Date (optional):</label>
+            <input type="date" name="recurrence_stop_date">
+        </fieldset>
         <button type="submit">Create Copy</button>
     </form>
     <a href="/tasks" style="display:inline-block; margin-top:16px;">Back to Tasks</a>
