@@ -93,10 +93,10 @@ Simple Flask app with task tracking, audit trail, copy, export, and edit feature
 ### Deployment Notes
 
 - The server reads the `PORT` environment variable (defaults to `5000`) and binds to `0.0.0.0`, making it deployment friendly.
-- Example using Gunicorn:
+- Example using Gunicorn (ensure you reference `wsgi:app`):
    ```bash
    export PORT=8000
-   gunicorn -w 4 -b 0.0.0.0:${PORT} app:app
+   gunicorn -w 4 -b 0.0.0.0:${PORT} wsgi:app
    ```
    Adjust worker count to match your CPU resources.
 

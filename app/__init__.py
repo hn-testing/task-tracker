@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import os
+from datetime import date
+from collections import Counter
 from dotenv import load_dotenv
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 env_path = os.path.join(BASE_DIR, '.env')
@@ -582,6 +584,8 @@ def create_app():
 
     @app.route('/tasks/report', methods=['GET'])
     def task_report():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
         employees = database.get_employees()
         all_tasks = []
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
@@ -605,9 +609,9 @@ def create_app():
         # Apply filters
         filtered_tasks = all_tasks
         if category:
-            filtered_tasks = [t for t in filtered_tasks if t['category'] == category]
+            filtered_tasks = [t for t in filtered_tasks if str(t.get('category', '')).lower() == category]
         if status:
-            filtered_tasks = [t for t in filtered_tasks if t['status'] == status]
+            filtered_tasks = [t for t in filtered_tasks if str(t.get('status', '')).lower() == status]
         if assigned_by:
             filtered_tasks = [t for t in filtered_tasks if str(t['assigned_by']) == assigned_by or t.get('assigned_by_name','') == assigned_by]
         if assigned_to:
@@ -621,11 +625,46 @@ def create_app():
         if end_date:
             filtered_tasks = [t for t in filtered_tasks if t['end_date'] <= end_date]
         num_tasks = len(filtered_tasks)
+        status_counter = Counter(str(t.get('status', 'unknown')).lower() for t in filtered_tasks)
+        status_order = ['todo', 'in progress', 'blocked', 'completed']
+        status_labels = [label for label in status_order if label in status_counter]
+        status_labels.extend([label for label in status_counter.keys() if label not in status_labels])
+        status_counts = [status_counter[label] for label in status_labels]
+        total_progress = sum(t['progress'] for t in filtered_tasks)
+        avg_progress = round(total_progress / num_tasks, 2) if num_tasks else 0
+        today = date.today()
+        overdue_count = 0
+        for t in filtered_tasks:
+            end_val = t.get('end_date')
+            end_dt = None
+            if end_val:
+                if isinstance(end_val, str):
+                    try:
+                        end_dt = date.fromisoformat(end_val)
+                    except ValueError:
+                        end_dt = None
+                else:
+                    end_dt = end_val
+            if end_dt and end_dt < today and t.get('status') != 'completed':
+                overdue_count += 1
+        category_counter = Counter(str(t.get('category', 'uncategorized')).lower() for t in filtered_tasks)
+        status_counter_dict = dict(status_counter)
+        category_counter_dict = dict(category_counter)
+        category_order = ['team', 'personal']
+        category_labels = [label for label in category_order if label in category_counter_dict]
+        category_labels.extend([label for label in category_counter_dict.keys() if label not in category_labels])
+        category_counts = [category_counter_dict[label] for label in category_labels]
+        status_percentages = {label: round(status_counter[label] / num_tasks * 100, 1) for label in status_labels} if num_tasks else {}
+        completed_count = status_counter.get('completed', 0)
+        active_count = num_tasks - completed_count
+        in_progress_count = status_counter.get('in progress', 0)
+        blocked_count = status_counter.get('blocked', 0)
         # Calculate top/bottom 5 for team and personal
         def get_top_bottom(tasks, category):
             emp_stats = {}
             for t in tasks:
-                if t['category'] != category:
+                category_value = str(t.get('category', '')).lower()
+                if category_value != category:
                     continue
                 eid = t['assigned_to']
                 if eid not in emp_stats:
@@ -650,12 +689,45 @@ def create_app():
             emp_tasks = [t for t in filtered_tasks if t['employee_name'] == emp['name']]
             if not emp_tasks:
                 continue
-            avg_progress = sum(t['progress'] for t in emp_tasks) / len(emp_tasks)
+            emp_avg_progress = sum(t['progress'] for t in emp_tasks) / len(emp_tasks)
             if branch not in branch_chart_data:
                 branch_chart_data[branch] = []
-            branch_chart_data[branch].append(avg_progress)
+            branch_chart_data[branch].append(emp_avg_progress)
         branch_labels = list(branch_chart_data.keys())
         branch_avg_progress = [sum(vals)/len(vals) for vals in branch_chart_data.values()]
-        return render_template('task_report.html', tasks=filtered_tasks, current_user=current_user, employees=employees, category=category, status=status, assigned_by=assigned_by, assigned_to=assigned_to, progress_min=progress_min, progress_max=progress_max, top5_team=top5_team, bottom5_team=bottom5_team, top5_personal=top5_personal, bottom5_personal=bottom5_personal, start_date=start_date, end_date=end_date, num_tasks=num_tasks, branch_labels=branch_labels, branch_avg_progress=branch_avg_progress)
+        return render_template(
+            'task_report.html',
+            tasks=filtered_tasks,
+            current_user=current_user,
+            employees=employees,
+            category=category,
+            status=status,
+            assigned_by=assigned_by,
+            assigned_to=assigned_to,
+            progress_min=progress_min,
+            progress_max=progress_max,
+            top5_team=top5_team,
+            bottom5_team=bottom5_team,
+            top5_personal=top5_personal,
+            bottom5_personal=bottom5_personal,
+            start_date=start_date,
+            end_date=end_date,
+            num_tasks=num_tasks,
+            avg_progress=avg_progress,
+            overdue_count=overdue_count,
+            status_labels=status_labels,
+            status_counts=status_counts,
+            status_counter=status_counter_dict,
+            status_percentages=status_percentages,
+            category_labels=category_labels,
+            category_counts=category_counts,
+            category_counter=category_counter_dict,
+            completed_count=completed_count,
+            active_count=active_count,
+            in_progress_count=in_progress_count,
+            blocked_count=blocked_count,
+            branch_labels=branch_labels,
+            branch_avg_progress=branch_avg_progress
+        )
 
     return app
