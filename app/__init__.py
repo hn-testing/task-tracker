@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, abort
 import os
 from datetime import date
 from collections import Counter
@@ -62,6 +62,28 @@ def create_app():
             cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
         conn.commit()
     conn.close()
+
+    def can_user_approve_update(current_user, task, update, employee_lookup=None):
+        """Return True when the user is authorised to approve a task update."""
+        if not current_user or not task or not update:
+            return False
+        if current_user.get('designation_id') == 1:
+            return True
+        assigned_by = task.get('assigned_by')
+        assigned_to = task.get('assigned_to')
+        if assigned_by and assigned_by != assigned_to and current_user['id'] == assigned_by:
+            return True
+        updated_by = update.get('updated_by')
+        if not updated_by:
+            return False
+        employee = None
+        if employee_lookup:
+            employee = employee_lookup.get(updated_by)
+        if not employee:
+            employee = database.get_employee(updated_by)
+        if employee and employee.get('manager_id') == current_user['id']:
+            return True
+        return False
 
     @app.route('/')
     def home():
@@ -309,6 +331,14 @@ def create_app():
         if status_filter and status_filter != 'all':
             all_tasks = [t for t in all_tasks if t.get('status') == status_filter]
             subordinate_tasks = [t for t in subordinate_tasks if t.get('status') == status_filter]
+        pending_counts = {}
+        task_ids_for_counts = list({t['id'] for t in (all_tasks + subordinate_tasks)})
+        if task_ids_for_counts:
+            pending_counts = database.get_pending_update_counts(task_ids_for_counts)
+        for t in all_tasks:
+            t['pending_updates_count'] = pending_counts.get(t['id'], 0)
+        for t in subordinate_tasks:
+            t['pending_updates_count'] = pending_counts.get(t['id'], 0)
         return render_template('tasks.html', tasks=all_tasks, employees=employees, current_user=current_user, subordinate_tasks=subordinate_tasks, status_filter=status_filter)
 
     @app.route('/tasks/export', methods=['GET'])
@@ -629,7 +659,7 @@ def create_app():
             status = status_input or task.get('status') or 'todo'
             changed_by = session.get('user_id')
             try:
-                total_progress = database.create_task_update(
+                database.create_task_update(
                     task_id,
                     changed_by,
                     update_value,
@@ -640,7 +670,6 @@ def create_app():
                     customer_response,
                     remarks
                 )
-                database.update_task_progress_and_status(task_id, total_progress, status, changed_by)
             except Exception as e:
                 print(f"[WARN] Failed to log task update: {e}")
         return redirect(url_for('tasks'))
@@ -656,12 +685,88 @@ def create_app():
         total_progress = database.get_task_update_total(task_id)
         current_user = database.get_employee(session['user_id'])
         employees = database.get_employees()
-        emp_map = {e['id']: e['name'] for e in employees}
+        employees_by_id = {e['id']: e for e in employees}
+        emp_map = {emp_id: emp['name'] for emp_id, emp in employees_by_id.items()}
         assigned_to_name = emp_map.get(task['assigned_to'], task['assigned_to']) if task.get('assigned_to') else ''
+        pending_notice = request.args.get('pending') == '1'
+        pending_updates = 0
         for update in updates:
             if not update.get('updated_by_name') and update.get('updated_by'):
                 update['updated_by_name'] = emp_map.get(update['updated_by'], update['updated_by'])
-        return render_template('task_updates.html', task=task, updates=updates, assigned_to_name=assigned_to_name, total_progress=total_progress, current_user=current_user)
+            if update.get('approved_by') and not update.get('approved_by_name'):
+                approver = employees_by_id.get(update['approved_by'])
+                if approver:
+                    update['approved_by_name'] = approver.get('name')
+            if update.get('rejected_by') and not update.get('rejected_by_name'):
+                rejector = employees_by_id.get(update['rejected_by'])
+                if rejector:
+                    update['rejected_by_name'] = rejector.get('name')
+            update['can_approve'] = False
+            is_pending = not update.get('approved') and not update.get('rejected')
+            if is_pending:
+                pending_updates += 1
+                if can_user_approve_update(current_user, task, update, employees_by_id):
+                    update['can_approve'] = True
+            else:
+                update['can_approve'] = False
+        return render_template(
+            'task_updates.html',
+            task=task,
+            updates=updates,
+            assigned_to_name=assigned_to_name,
+            total_progress=total_progress,
+            current_user=current_user,
+            pending_updates=pending_updates,
+            pending_notice=pending_notice
+        )
+
+    @app.route('/task_updates/<int:update_id>/approve', methods=['POST'])
+    def approve_task_update(update_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        current_user = database.get_employee(session['user_id'])
+        update = database.get_task_update(update_id)
+        if not update:
+            return redirect(url_for('tasks'))
+        task = database.get_task(update['task_id'])
+        if not task:
+            return redirect(url_for('tasks'))
+        if update.get('approved'):
+            return redirect(url_for('view_task_updates', task_id=task['id']))
+        if not can_user_approve_update(current_user, task, update):
+            abort(403)
+        try:
+            task_id, total_progress, status = database.approve_task_update(update_id, current_user['id'])
+            new_status = status or task.get('status')
+            database.update_task_progress_and_status(task_id, total_progress, new_status, current_user['id'])
+        except Exception as e:
+            print(f"[WARN] Failed to approve task update {update_id}: {e}")
+        return redirect(url_for('view_task_updates', task_id=task['id']))
+
+    @app.route('/task_updates/<int:update_id>/reject', methods=['POST'])
+    def reject_task_update(update_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        current_user = database.get_employee(session['user_id'])
+        update = database.get_task_update(update_id)
+        if not update:
+            return redirect(url_for('tasks'))
+        task = database.get_task(update['task_id'])
+        if not task:
+            return redirect(url_for('tasks'))
+        if update.get('approved') or update.get('rejected'):
+            return redirect(url_for('view_task_updates', task_id=task['id']))
+        if not can_user_approve_update(current_user, task, update):
+            abort(403)
+        comment = request.form.get('comment', '').strip()
+        if not comment:
+            comment = 'No comment provided.'
+        try:
+            task_id, total_progress, _ = database.reject_task_update(update_id, current_user['id'], comment)
+            database.update_task_progress_and_status(task_id, total_progress, task.get('status'), current_user['id'])
+        except Exception as e:
+            print(f"[WARN] Failed to reject task update {update_id}: {e}")
+        return redirect(url_for('view_task_updates', task_id=task['id']))
 
     @app.route('/tasks/<int:task_id>/update', methods=['GET', 'POST'])
     def task_update_form(task_id):
@@ -690,7 +795,7 @@ def create_app():
             status = status_input or task.get('status') or 'todo'
             changed_by = current_user['id']
             try:
-                total_progress = database.create_task_update(
+                database.create_task_update(
                     task_id,
                     changed_by,
                     update_value,
@@ -701,10 +806,9 @@ def create_app():
                     customer_response,
                     remarks
                 )
-                database.update_task_progress_and_status(task_id, total_progress, status, changed_by)
             except Exception as e:
                 print(f"[WARN] Failed to log task update: {e}")
-            return redirect(url_for('view_task_updates', task_id=task_id))
+            return redirect(url_for('view_task_updates', task_id=task_id, pending='1'))
         return render_template('task_update_form.html', task=task, assigned_to_name=assigned_to_name, total_progress=total_progress, current_user=current_user)
 
     @app.route('/tasks/edit/<int:task_id>', methods=['GET','POST'])

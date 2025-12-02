@@ -19,6 +19,7 @@
         .actions .secondary { background: #e5e7eb; color: #1f2937; border: none; cursor: pointer; }
         .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
         .meta-card { background: #f1f5ff; border: 1px solid #dbeafe; border-radius: 6px; padding: 12px; }
+        .info-box { background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 6px; padding: 12px; margin-bottom: 16px; color: #0c4a6e; font-size: 0.95rem; }
         @media (max-width: 768px) {
             .container { margin: 16px; padding: 16px; }
         }
@@ -31,9 +32,10 @@
             <div class="meta-card"><strong>Task ID:</strong><br>{{ task['id'] }}</div>
             <div class="meta-card"><strong>Assigned To:</strong><br>{{ assigned_to_name }}</div>
             <div class="meta-card"><strong>Target:</strong><br>{{ task['target'] }}</div>
-            <div class="meta-card"><strong>Total Progress Recorded:</strong><br>{{ total_progress }}</div>
+            <div class="meta-card"><strong>Total Approved Progress:</strong><br>{{ total_progress }}</div>
             <div class="meta-card"><strong>Status:</strong><br>{{ task['status'] }}</div>
         </div>
+        <div class="info-box">Updates require approval from your direct manager or the task assigner before they impact progress and status.</div>
         <form method="POST">
             <div>
                 <label for="update_value">Update Value</label>

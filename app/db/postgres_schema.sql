@@ -90,6 +90,13 @@ CREATE TABLE IF NOT EXISTS task_updates (
     customer_business_nature TEXT,
     customer_response TEXT,
     remarks TEXT,
+    approved BOOLEAN NOT NULL DEFAULT FALSE,
+    approved_by INTEGER REFERENCES employees(id),
+    approved_at TIMESTAMP,
+    rejected BOOLEAN NOT NULL DEFAULT FALSE,
+    rejected_by INTEGER REFERENCES employees(id),
+    rejected_at TIMESTAMP,
+    rejection_comment TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -107,3 +114,24 @@ ALTER TABLE task_updates
 
 ALTER TABLE task_updates
     ALTER COLUMN current_progress TYPE NUMERIC USING current_progress::numeric;
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES employees(id);
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS rejected BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS rejected_by INTEGER REFERENCES employees(id);
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP;
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS rejection_comment TEXT;

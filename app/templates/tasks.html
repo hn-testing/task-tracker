@@ -18,6 +18,8 @@
         .menu span { margin-left: auto; }
         .update-actions { display: flex; flex-direction: column; gap: 6px; }
         .update-actions a, .update-actions button { display: inline-block; }
+        .view-updates-link { display: flex; align-items: center; gap: 6px; }
+        .pending-indicator { background: #f59e0b; color: #78350f; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); display: none; align-items: center; justify-content: center; z-index: 999; padding: 16px; }
         .modal-backdrop.active { display: flex; }
         .modal-window { background: #fff; width: 100%; max-width: 520px; border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3); padding: 24px; position: relative; }
@@ -89,7 +91,7 @@
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Target</th>
-                <th>Current Progress</th>
+                <th>Approved Progress</th>
                 <th>Status</th>
                 <th>Progress (%)</th>
                 <th>Assigned By</th>
@@ -116,7 +118,12 @@
                 <td>
                     <div class="update-actions">
                         <a href="/tasks/{{ task['id'] }}/update" style="padding:6px 10px; background:#2563eb; color:#fff; border-radius:4px; text-decoration:none; text-align:center;">Log Update</a>
-                        <a href="/tasks/{{ task['id'] }}/updates">View Updates</a>
+                        <div class="view-updates-link">
+                            <a href="/tasks/{{ task['id'] }}/updates">View Updates</a>
+                            {% if task['pending_updates_count'] %}
+                            <span class="pending-indicator">{{ task['pending_updates_count'] }} pending</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </td>
                 <td>
@@ -139,7 +146,7 @@
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Target</th>
-                <th>Current Progress</th>
+                <th>Approved Progress</th>
                 <th>Status</th>
                 <th>Progress (%)</th>
                 <th>Assigned By</th>
@@ -170,7 +177,14 @@
                 </td>
                 <td><a href="/tasks/copy/{{ task['id'] }}">Copy</a></td>
                 <td><a href="/tasks/audit/{{ task['id'] }}">Audit</a></td>
-                <td><a href="/tasks/{{ task['id'] }}/updates">View</a></td>
+                <td>
+                    <div class="view-updates-link">
+                        <a href="/tasks/{{ task['id'] }}/updates">View</a>
+                        {% if task['pending_updates_count'] %}
+                        <span class="pending-indicator">{{ task['pending_updates_count'] }} pending</span>
+                        {% endif %}
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </table>

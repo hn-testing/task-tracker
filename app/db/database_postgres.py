@@ -4,7 +4,8 @@ from psycopg2.extras import RealDictCursor
 from passlib.hash import bcrypt
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+from decimal import Decimal
 
 PG_HOST = os.getenv('PG_HOST','localhost')
 PG_PORT = os.getenv('PG_PORT','5432')
@@ -140,21 +141,33 @@ def get_task(task_id):
         cur.execute('SELECT * FROM tasks WHERE id=%s',(task_id,))
         return cur.fetchone()
 
+def _sync_task_update_progress(cur, task_id):
+    cur.execute('''SELECT id, approved, COALESCE(update_value, 0)
+                   FROM task_updates
+                   WHERE task_id=%s
+                   ORDER BY created_at ASC, id ASC''', (task_id,))
+    rows = cur.fetchall()
+    running_total = Decimal('0')
+    for update_id, approved, value in rows:
+        value_decimal = value if isinstance(value, Decimal) else Decimal(str(value))
+        if approved:
+            running_total += value_decimal
+        cur.execute('UPDATE task_updates SET current_progress=%s WHERE id=%s', (running_total, update_id))
+    return running_total
+
 def create_task_update(task_id, updated_by, update_value, status, customer_name, customer_location, business_nature, customer_response, remarks):
     with connect_db() as conn, conn.cursor() as cur:
-        cur.execute('''INSERT INTO task_updates (task_id, updated_by, update_value, status, customer_name, customer_location, customer_business_nature, customer_response, remarks)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''',
+        cur.execute('''INSERT INTO task_updates (task_id, updated_by, update_value, status, customer_name, customer_location, customer_business_nature, customer_response, remarks, approved)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s, FALSE) RETURNING id''',
                     (task_id, updated_by, update_value, status, customer_name, customer_location, business_nature, customer_response, remarks))
         update_id = cur.fetchone()[0]
-        cur.execute('SELECT COALESCE(SUM(update_value), 0) FROM task_updates WHERE task_id=%s', (task_id,))
-        total_progress = cur.fetchone()[0] or 0
-        cur.execute('UPDATE task_updates SET current_progress=%s WHERE id=%s', (total_progress, update_id))
+        _sync_task_update_progress(cur, task_id)
         conn.commit()
-        return total_progress
+        return update_id
 
 def get_task_update_total(task_id):
     with connect_db() as conn, conn.cursor() as cur:
-        cur.execute('SELECT COALESCE(SUM(update_value), 0) FROM task_updates WHERE task_id=%s', (task_id,))
+        cur.execute('SELECT COALESCE(SUM(update_value), 0) FROM task_updates WHERE task_id=%s AND approved=TRUE', (task_id,))
         total = cur.fetchone()[0]
         return total or 0
 
@@ -162,12 +175,76 @@ def get_task_updates(task_id):
     with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute('''SELECT tu.id, tu.task_id, tu.updated_by, tu.update_value, tu.current_progress, tu.status, tu.customer_name,
                                tu.customer_location, tu.customer_business_nature, tu.customer_response, tu.remarks,
-                               tu.created_at, e.name AS updated_by_name
+                               tu.approved, tu.approved_by, tu.approved_at,
+                               tu.rejected, tu.rejected_by, tu.rejected_at, tu.rejection_comment,
+                               tu.created_at,
+                               e.name AS updated_by_name, approver.name AS approved_by_name, rejector.name AS rejected_by_name
                        FROM task_updates tu
                        LEFT JOIN employees e ON tu.updated_by = e.id
+                       LEFT JOIN employees approver ON tu.approved_by = approver.id
+                       LEFT JOIN employees rejector ON tu.rejected_by = rejector.id
                        WHERE tu.task_id=%s
                        ORDER BY tu.created_at DESC, tu.id DESC''', (task_id,))
         return cur.fetchall()
+
+def get_task_update(update_id):
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('SELECT * FROM task_updates WHERE id=%s', (update_id,))
+        return cur.fetchone()
+
+def approve_task_update(update_id, approver_id):
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('SELECT task_id, update_value, status, approved FROM task_updates WHERE id=%s', (update_id,))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError('Update not found')
+        task_id, update_value, status, approved = row
+        if approved:
+            return task_id, get_task_update_total(task_id), status
+        cur.execute('''UPDATE task_updates
+                       SET approved=TRUE,
+                           approved_by=%s,
+                           approved_at=%s,
+                           rejected=FALSE,
+                           rejected_by=NULL,
+                           rejected_at=NULL,
+                           rejection_comment=NULL
+                       WHERE id=%s''', (approver_id, datetime.utcnow(), update_id))
+        total_progress = _sync_task_update_progress(cur, task_id)
+        conn.commit()
+        return task_id, total_progress, status
+
+def reject_task_update(update_id, approver_id, comment):
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('SELECT task_id, status FROM task_updates WHERE id=%s', (update_id,))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError('Update not found')
+        task_id, status = row
+        cur.execute('''UPDATE task_updates
+                       SET approved=FALSE,
+                           approved_by=NULL,
+                           approved_at=NULL,
+                           rejected=TRUE,
+                           rejected_by=%s,
+                           rejected_at=%s,
+                           rejection_comment=%s
+                       WHERE id=%s''', (approver_id, datetime.utcnow(), comment, update_id))
+        total_progress = _sync_task_update_progress(cur, task_id)
+        cur.execute('UPDATE task_updates SET current_progress=%s WHERE id=%s', (total_progress, update_id))
+        conn.commit()
+        return task_id, total_progress, status
+
+def get_pending_update_counts(task_ids):
+    if not task_ids:
+        return {}
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('''SELECT task_id, COUNT(*)
+                       FROM task_updates
+                       WHERE task_id = ANY(%s) AND approved=FALSE AND rejected=FALSE
+                       GROUP BY task_id''', (task_ids,))
+        rows = cur.fetchall()
+    return {task_id: count for task_id, count in rows}
 
 def update_task_progress_and_status(task_id, current_progress, status, changed_by=None):
     with connect_db() as conn, conn.cursor() as cur:
