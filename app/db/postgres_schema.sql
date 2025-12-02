@@ -9,6 +9,17 @@ CREATE TABLE IF NOT EXISTS branches (
     name TEXT NOT NULL UNIQUE
 );
 
+CREATE TABLE IF NOT EXISTS roles (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS employees (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
@@ -16,7 +27,9 @@ CREATE TABLE IF NOT EXISTS employees (
     password TEXT NOT NULL,
     designation_id INTEGER NOT NULL REFERENCES designations(id),
     manager_id INTEGER REFERENCES employees(id),
-    branch_id INTEGER REFERENCES branches(id)
+    branch_id INTEGER REFERENCES branches(id),
+    role_id INTEGER REFERENCES roles(id),
+    department_id INTEGER REFERENCES departments(id)
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -64,3 +77,9 @@ CREATE TABLE IF NOT EXISTS task_recurrence (
     active BOOLEAN NOT NULL DEFAULT TRUE,
     last_generated_task_id INTEGER NULL REFERENCES tasks(id)
 );
+
+ALTER TABLE employees
+    ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES roles(id);
+
+ALTER TABLE employees
+    ADD COLUMN IF NOT EXISTS department_id INTEGER REFERENCES departments(id);

@@ -33,19 +33,32 @@ def get_branches():
         cur.execute('SELECT id, name FROM branches')
         return cur.fetchall()
 
+def get_roles():
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('SELECT id, name, description FROM roles ORDER BY name ASC')
+        return cur.fetchall()
+
+def get_departments():
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('SELECT id, name FROM departments ORDER BY name ASC')
+        return cur.fetchall()
+
 def get_employees():
     with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute('''
             SELECT e.id, e.name, e.email, e.designation_id, d.title AS designation, m.name AS manager_name, b.name AS branch_name,
-                   e.manager_id, e.branch_id
+                   e.manager_id, e.branch_id, e.role_id, e.department_id,
+                   r.name AS role_name, dept.name AS department_name
             FROM employees e
             LEFT JOIN designations d ON e.designation_id = d.id
             LEFT JOIN employees m ON e.manager_id = m.id
             LEFT JOIN branches b ON e.branch_id = b.id
+            LEFT JOIN roles r ON e.role_id = r.id
+            LEFT JOIN departments dept ON e.department_id = dept.id
         ''')
         return cur.fetchall()
 
-def create_employee(name, email, designation_id, manager_id, branch_id=None, raw_password='changeme'):
+def create_employee(name, email, designation_id, manager_id, branch_id=None, role_id=None, department_id=None, raw_password='changeme'):
     if raw_password:
         raw_password = raw_password[:72]
     try:
@@ -55,8 +68,9 @@ def create_employee(name, email, designation_id, manager_id, branch_id=None, raw
         legacy_hash = hashlib.sha256(raw_password.encode('utf-8')).hexdigest()
         hashed = 'legacy$' + legacy_hash
     with connect_db() as conn, conn.cursor() as cur:
-        cur.execute('''INSERT INTO employees (name,email,password,designation_id,manager_id,branch_id) VALUES (%s,%s,%s,%s,%s,%s)''',
-                    (name,email,hashed,designation_id,manager_id,branch_id))
+        cur.execute('''INSERT INTO employees (name,email,password,designation_id,manager_id,branch_id,role_id,department_id)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s)''',
+                    (name,email,hashed,designation_id,manager_id,branch_id,role_id,department_id))
         conn.commit()
 
 def get_employee(emp_id):
@@ -77,10 +91,11 @@ def update_employee_password(emp_id, new_password):
         cur.execute('UPDATE employees SET password=%s WHERE id=%s',(hashed, emp_id))
         conn.commit()
 
-def update_employee(emp_id, name, email, designation_id, manager_id, branch_id):
+def update_employee(emp_id, name, email, designation_id, manager_id, branch_id, role_id, department_id):
     with connect_db() as conn, conn.cursor() as cur:
-        cur.execute('''UPDATE employees SET name=%s, email=%s, designation_id=%s, manager_id=%s, branch_id=%s WHERE id=%s''',
-                    (name,email,designation_id,manager_id,branch_id,emp_id))
+        cur.execute('''UPDATE employees SET name=%s, email=%s, designation_id=%s, manager_id=%s, branch_id=%s, role_id=%s, department_id=%s
+                       WHERE id=%s''',
+                    (name,email,designation_id,manager_id,branch_id,role_id,department_id,emp_id))
         conn.commit()
 
 def delete_employee(emp_id):
@@ -216,6 +231,8 @@ def ensure_sequences():
         for table, seq in [
             ('designations','designations_id_seq'),
             ('branches','branches_id_seq'),
+            ('roles','roles_id_seq'),
+            ('departments','departments_id_seq'),
             ('employees','employees_id_seq'),
             ('tasks','tasks_id_seq'),
             ('task_audit','task_audit_id_seq')

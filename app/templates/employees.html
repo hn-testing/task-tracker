@@ -116,6 +116,26 @@
                     {% endfor %}
                 </datalist>
             </div>
+            <div class="form-group">
+                <label for="role_id">Role:</label>
+                <input list="role_list" name="role_id" id="role_id" value="{% if edit_employee %}{{ edit_employee['role_name'] or edit_employee['role_id'] }}{% endif %}">
+                <datalist id="role_list">
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                    <option value="{{ role.name }}">{{ role.name }}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div class="form-group">
+                <label for="department_id">Department:</label>
+                <input list="department_list" name="department_id" id="department_id" value="{% if edit_employee %}{{ edit_employee['department_name'] or edit_employee['department_id'] }}{% endif %}">
+                <datalist id="department_list">
+                    {% for department in departments %}
+                    <option value="{{ department.id }}">{{ department.name }}</option>
+                    <option value="{{ department.name }}">{{ department.name }}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
             <button type="submit">Submit</button>
             <a href="/employees" style="margin-top:8px; display:inline-block; padding:8px 16px; background:#ccc; color:#333; border-radius:4px; text-decoration:none; text-align:center;">Cancel</a>
         </form>
@@ -160,6 +180,26 @@
                 </datalist>
             </div>
             <div class="form-group">
+                <label for="role_id">Role:</label>
+                <input list="role_list" name="role_id" id="role_id">
+                <datalist id="role_list">
+                    {% for role in roles %}
+                    <option value="{{ role.id }}">{{ role.name }}</option>
+                    <option value="{{ role.name }}">{{ role.name }}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div class="form-group">
+                <label for="department_id">Department:</label>
+                <input list="department_list" name="department_id" id="department_id">
+                <datalist id="department_list">
+                    {% for department in departments %}
+                    <option value="{{ department.id }}">{{ department.name }}</option>
+                    <option value="{{ department.name }}">{{ department.name }}</option>
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div class="form-group">
                 <label for="password">Password:</label>
                 <input type="password" name="password" id="password" placeholder="(leave blank for changeme)">
             </div>
@@ -175,6 +215,8 @@
                 <th>Designation</th>
                 <th>Manager</th>
                 <th>Branch</th>
+                <th>Role</th>
+                <th>Department</th>
                 <th>Actions</th>
             </tr>
             {% for employee in employees %}
@@ -184,6 +226,8 @@
                 <td>{{ employee['designation'] }}</td>
                 <td>{{ employee['manager_name'] }}</td>
                 <td>{{ employee['branch_name'] }}</td>
+                <td>{{ employee['role_name'] }}</td>
+                <td>{{ employee['department_name'] }}</td>
                 <td>
                     <a href="/employees/update/{{ employee['id'] }}">Edit</a>
                     <a href="/employees/delete/{{ employee['id'] }}" onclick="return confirm('Delete employee?');">Delete</a>
@@ -192,5 +236,6 @@
             {% endfor %}
         </table>
     </div>
+
 </body>
 </html>

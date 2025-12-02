@@ -58,8 +58,10 @@ def create_app():
         designations = database.get_designations()
         valid_managers = employees
         branches = database.get_branches()
+        roles = database.get_roles()
+        departments = database.get_departments()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, valid_managers=valid_managers, branches=branches, current_user=current_user)
+        return render_template('employees.html', employees=employees, designations=designations, valid_managers=valid_managers, branches=branches, roles=roles, departments=departments, current_user=current_user)
 
     @app.route('/employees/create', methods=['POST'])
     def create_employee():
@@ -68,6 +70,8 @@ def create_app():
         designation_id = int(request.form['designation_id'])
         manager_raw = request.form.get('manager_id') or None
         branch_raw = request.form.get('branch_id') or None
+        role_raw = request.form.get('role_id') or None
+        department_raw = request.form.get('department_id') or None
         password = request.form.get('password') or 'changeme'
         # Resolve manager id allowing either numeric id or name/email
         manager_id = None
@@ -89,17 +93,37 @@ def create_app():
                 match_branch = next((b for b in branches_list if b['name'].lower() == branch_raw.lower()), None)
                 if match_branch:
                     branch_id = match_branch['id']
+        role_id = None
+        if role_raw:
+            if role_raw.isdigit():
+                role_id = int(role_raw)
+            else:
+                roles_list = database.get_roles()
+                match_role = next((r for r in roles_list if r['name'].lower() == role_raw.lower()), None)
+                if match_role:
+                    role_id = match_role['id']
+        department_id = None
+        if department_raw:
+            if department_raw.isdigit():
+                department_id = int(department_raw)
+            else:
+                departments_list = database.get_departments()
+                match_department = next((d for d in departments_list if d['name'].lower() == department_raw.lower()), None)
+                if match_department:
+                    department_id = match_department['id']
         error = None
         try:
-            database.create_employee(name, email, designation_id, manager_id, branch_id, raw_password=password)
+            database.create_employee(name, email, designation_id, manager_id, branch_id, role_id, department_id, raw_password=password)
         except Exception:
             error = 'An error occurred while creating the employee.'
         employees = database.get_employees()
         designations = database.get_designations()
         valid_managers = employees
         branches = database.get_branches()
+        roles = database.get_roles()
+        departments = database.get_departments()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, error=error, valid_managers=valid_managers, branches=branches, current_user=current_user)
+        return render_template('employees.html', employees=employees, designations=designations, error=error, valid_managers=valid_managers, branches=branches, roles=roles, departments=departments, current_user=current_user)
 
     @app.route('/employees/update/<int:emp_id>', methods=['GET', 'POST'])
     def update_employee(emp_id):
@@ -107,17 +131,62 @@ def create_app():
             name = request.form['name']
             email = request.form['email']
             designation_id = int(request.form['designation_id'])
-            manager_id = request.form.get('manager_id') or None
-            branch_id = request.form.get('branch_id') or None
-            database.update_employee(emp_id, name, email, designation_id, int(manager_id) if manager_id else None, int(branch_id) if branch_id else None)
+            manager_raw = request.form.get('manager_id') or None
+            branch_raw = request.form.get('branch_id') or None
+            role_raw = request.form.get('role_id') or None
+            department_raw = request.form.get('department_id') or None
+
+            resolved_manager = None
+            if manager_raw:
+                if manager_raw.isdigit():
+                    resolved_manager = int(manager_raw)
+                else:
+                    employees_list = database.get_employees()
+                    match_manager = next((e for e in employees_list if e['name'].lower() == manager_raw.lower() or e['email'].lower() == manager_raw.lower()), None)
+                    if match_manager:
+                        resolved_manager = match_manager['id']
+
+            resolved_branch = None
+            if branch_raw:
+                if branch_raw.isdigit():
+                    resolved_branch = int(branch_raw)
+                else:
+                    branches_list = database.get_branches()
+                    match_branch = next((b for b in branches_list if b['name'].lower() == branch_raw.lower()), None)
+                    if match_branch:
+                        resolved_branch = match_branch['id']
+
+            resolved_role = None
+            if role_raw:
+                if role_raw.isdigit():
+                    resolved_role = int(role_raw)
+                else:
+                    roles_list = database.get_roles()
+                    match_role = next((r for r in roles_list if r['name'].lower() == role_raw.lower()), None)
+                    if match_role:
+                        resolved_role = match_role['id']
+
+            resolved_department = None
+            if department_raw:
+                if department_raw.isdigit():
+                    resolved_department = int(department_raw)
+                else:
+                    departments_list = database.get_departments()
+                    match_department = next((d for d in departments_list if d['name'].lower() == department_raw.lower()), None)
+                    if match_department:
+                        resolved_department = match_department['id']
+
+            database.update_employee(emp_id, name, email, designation_id, resolved_manager, resolved_branch, resolved_role, resolved_department)
             return redirect(url_for('employees'))
         emp = database.get_employee(emp_id)
         employees = database.get_employees()
         designations = database.get_designations()
         valid_managers = [e for e in employees if e['id'] != emp_id]
         branches = database.get_branches()
+        roles = database.get_roles()
+        departments = database.get_departments()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, edit_employee=emp, valid_managers=valid_managers, branches=branches, current_user=current_user)
+        return render_template('employees.html', employees=employees, designations=designations, edit_employee=emp, valid_managers=valid_managers, branches=branches, roles=roles, departments=departments, current_user=current_user)
 
     @app.route('/employees/delete/<int:emp_id>')
     def delete_employee(emp_id):
@@ -263,7 +332,7 @@ def create_app():
         import io, csv
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['name','email','designation_title','manager_email','branch_name','password'])
+        writer.writerow(['name','email','designation_title','manager_email','branch_name','role_name','department_name','password'])
         from flask import make_response
         resp = make_response(output.getvalue())
         resp.headers['Content-Disposition'] = 'attachment; filename=employees_upload_template.csv'
@@ -373,6 +442,8 @@ def create_app():
         designations = {d['title']: d['id'] for d in database.get_designations()}
         employees = database.get_employees()
         branches = {b['name']: b['id'] for b in database.get_branches()}
+        roles = {r['name']: r['id'] for r in database.get_roles()}
+        departments = {d['name']: d['id'] for d in database.get_departments()}
         email_to_id = {e['email'].lower(): e['id'] for e in employees}
         result = None
         errors = []
@@ -392,6 +463,8 @@ def create_app():
                         designation_title = row.get('designation_title','').strip()
                         manager_email = row.get('manager_email','').strip()
                         branch_name = row.get('branch_name','').strip()
+                        role_name = row.get('role_name','').strip()
+                        department_name = row.get('department_name','').strip()
                         password = row.get('password','changeme').strip() or 'changeme'
                         if not (name and email and designation_title):
                             errors.append(f'Row {i}: missing required fields.')
@@ -412,11 +485,29 @@ def create_app():
                         branch_id = None
                         if branch_name:
                             branch_id = branches.get(branch_name)
-                            if not branch_id:
-                                errors.append(f'Row {i}: branch_name not found.')
+                            if not branch_id and branch_name.isdigit():
+                                branch_id = int(branch_name)
+                            elif not branch_id:
+                                errors.append(f'Row {i}: branch "{branch_name}" not found.')
+                                continue
+                        role_id = None
+                        if role_name:
+                            role_id = roles.get(role_name)
+                            if not role_id and role_name.isdigit():
+                                role_id = int(role_name)
+                            elif not role_id:
+                                errors.append(f'Row {i}: role "{role_name}" not found.')
+                                continue
+                        department_id = None
+                        if department_name:
+                            department_id = departments.get(department_name)
+                            if not department_id and department_name.isdigit():
+                                department_id = int(department_name)
+                            elif not department_id:
+                                errors.append(f'Row {i}: department "{department_name}" not found.')
                                 continue
                         try:
-                            database.create_employee(name, email, designation_id, manager_id, branch_id, raw_password=password)
+                            database.create_employee(name, email, designation_id, manager_id, branch_id, role_id, department_id, raw_password=password)
                             created += 1
                             email_to_id[email.lower()] = -1
                         except Exception:

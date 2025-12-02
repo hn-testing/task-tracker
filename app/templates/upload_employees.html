@@ -32,7 +32,7 @@
     </div>
     <h1>Bulk Upload Employees</h1>
     <p>Upload a CSV following the template. <a href="/employees/template">Download Template</a></p>
-    <p><strong>Columns:</strong> name, email, designation_title, manager_email (optional), branch_name (optional), password (optional)</p>
+    <p><strong>Columns:</strong> name, email, designation_title, manager_email (optional), branch_name (optional), role_name (optional), department_name (optional), password (optional)</p>
     {% if result %}<div class="result">{{ result }}</div>{% endif %}
     {% if errors and errors|length > 0 %}
     <div class="errors">
