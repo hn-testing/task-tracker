@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 import os
 from datetime import date
+import datetime
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
@@ -117,6 +118,57 @@ def create_app():
             'current_user': current_user,
             'current_role_name': current_role_name
         }
+
+    def _coerce_to_datetime(value):
+        if value is None:
+            return None
+        if isinstance(value, datetime.datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.datetime.combine(value, datetime.time())
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return None
+            parse_attempts = (
+                '%Y-%m-%d',
+                '%Y-%m-%d %H:%M',
+                '%Y-%m-%d %H:%M:%S',
+                '%Y-%m-%d %H:%M:%S.%f',
+                '%d-%m-%Y',
+                '%d-%m-%Y %H:%M',
+                '%d-%m-%Y %H:%M:%S',
+                '%d/%m/%Y'
+            )
+            for fmt in parse_attempts:
+                try:
+                    return datetime.datetime.strptime(stripped, fmt)
+                except ValueError:
+                    continue
+            try:
+                normalized = stripped.replace('Z', '+00:00')
+                return datetime.datetime.fromisoformat(normalized)
+            except ValueError:
+                return None
+        return None
+
+    @app.template_filter('as_dmy')
+    def format_as_dmy(value):
+        dt_value = _coerce_to_datetime(value)
+        if dt_value:
+            return dt_value.strftime('%d-%m-%Y')
+        if isinstance(value, str):
+            return value
+        return ''
+
+    @app.template_filter('as_dmy_hm')
+    def format_as_dmy_hm(value):
+        dt_value = _coerce_to_datetime(value)
+        if dt_value:
+            return dt_value.strftime('%d-%m-%Y %H:%M')
+        if isinstance(value, str):
+            return value
+        return ''
 
     @app.route('/')
     def home():

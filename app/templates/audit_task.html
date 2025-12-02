@@ -57,7 +57,7 @@
             <td>{{ a.old_value }}</td>
             <td>{{ a.new_value }}</td>
             <td>{{ a.changed_by_name }}</td>
-            <td>{{ a.changed_at }}</td>
+            <td>{{ a.changed_at|as_dmy_hm }}</td>
         </tr>
         {% endfor %}
     </table>

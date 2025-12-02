@@ -89,7 +89,7 @@
             </tr>
             {% for update in updates %}
             <tr>
-                <td>{{ update['created_at'] }}</td>
+                <td>{{ update['created_at']|as_dmy_hm }}</td>
                 <td>{{ update['updated_by_name'] or 'N/A' }}</td>
                 <td>{{ update['update_value'] or '-' }}</td>
                 <td>
@@ -108,9 +108,9 @@
                 <td>{{ update['remarks'] or '-' }}</td>
                 <td>
                     {% if update['approved'] %}
-                        <div>Approved{% if update['approved_by_name'] %} by {{ update['approved_by_name'] }}{% endif %}{% if update['approved_at'] %} on {{ update['approved_at'] }}{% endif %}</div>
+                        <div>Approved{% if update['approved_by_name'] %} by {{ update['approved_by_name'] }}{% endif %}{% if update['approved_at'] %} on {{ update['approved_at']|as_dmy_hm }}{% endif %}</div>
                     {% elif update['rejected'] %}
-                        <div>Rejected{% if update['rejected_by_name'] %} by {{ update['rejected_by_name'] }}{% endif %}{% if update['rejected_at'] %} on {{ update['rejected_at'] }}{% endif %}</div>
+                        <div>Rejected{% if update['rejected_by_name'] %} by {{ update['rejected_by_name'] }}{% endif %}{% if update['rejected_at'] %} on {{ update['rejected_at']|as_dmy_hm }}{% endif %}</div>
                         {% if update['rejection_comment'] %}
                         <div class="approve-note">"{{ update['rejection_comment'] }}"</div>
                         {% endif %}

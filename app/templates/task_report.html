@@ -141,7 +141,13 @@
             </div>
             <div class="insight-card">
                 <div class="insight-title">Filter Window</div>
-                <div class="insight-value" style="font-size:1.1rem;">{% if start_date or end_date %}{{ start_date or '...' }} → {{ end_date or '...' }}{% else %}All Dates{% endif %}</div>
+                <div class="insight-value" style="font-size:1.1rem;">
+                    {% if start_date or end_date %}
+                        {{ (start_date|as_dmy) if start_date else '...' }} → {{ (end_date|as_dmy) if end_date else '...' }}
+                    {% else %}
+                        All Dates
+                    {% endif %}
+                </div>
                 <div class="insight-meta">Category: {{ category or 'All' }} | Status: {{ status or 'All' }}</div>
             </div>
         </div>
@@ -181,8 +187,8 @@
                 <td>{{ task['status'] }}</td>
                 <td>{{ task['assigned_by_name'] }}</td>
                 <td>{{ task['employee_name'] }}</td>
-                <td>{{ task['start_date'] }}</td>
-                <td>{{ task['end_date'] }}</td>
+                <td>{{ task['start_date']|as_dmy }}</td>
+                <td>{{ task['end_date']|as_dmy }}</td>
                 <td>{{ task['target'] }}</td>
                 <td>{{ task['current_progress'] }}</td>
                 <td>{{ '%.2f'|format(task['progress']) }}</td>

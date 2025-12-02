@@ -133,8 +133,8 @@
                 <td>{{ task['name'] }}</td>
                 <td>{{ task['category'] }}</td>
                 <td>{{ task['type'] }}</td>
-                <td>{{ task['start_date'] }}</td>
-                <td>{{ task['end_date'] }}</td>
+                <td>{{ task['start_date']|as_dmy }}</td>
+                <td>{{ task['end_date']|as_dmy }}</td>
                 <td>{{ task['target'] }}</td>
                 <td>{{ task['current_progress'] }}</td>
                 <td>{{ task['status'] }}</td>
@@ -192,8 +192,8 @@
                 <td>{{ task['name'] }}</td>
                 <td>{{ task['category'] }}</td>
                 <td>{{ task['type'] }}</td>
-                <td>{{ task['start_date'] }}</td>
-                <td>{{ task['end_date'] }}</td>
+                <td>{{ task['start_date']|as_dmy }}</td>
+                <td>{{ task['end_date']|as_dmy }}</td>
                 <td>{{ task['target'] }}</td>
                 <td>{{ task['current_progress'] }}</td>
                 <td>{{ task['status'] }}</td>
