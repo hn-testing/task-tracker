@@ -339,7 +339,17 @@ def create_app():
             t['pending_updates_count'] = pending_counts.get(t['id'], 0)
         for t in subordinate_tasks:
             t['pending_updates_count'] = pending_counts.get(t['id'], 0)
-        return render_template('tasks.html', tasks=all_tasks, employees=employees, current_user=current_user, subordinate_tasks=subordinate_tasks, status_filter=status_filter)
+        allowed_assignee_ids = {current_user['id']} | set(subordinate_ids)
+        allowed_copy_assignees = [e for e in employees if e['id'] in allowed_assignee_ids]
+        return render_template(
+            'tasks.html',
+            tasks=all_tasks,
+            employees=employees,
+            current_user=current_user,
+            subordinate_tasks=subordinate_tasks,
+            status_filter=status_filter,
+            allowed_copy_assignees=allowed_copy_assignees
+        )
 
     @app.route('/tasks/export', methods=['GET'])
     def export_tasks():
@@ -767,6 +777,80 @@ def create_app():
         except Exception as e:
             print(f"[WARN] Failed to reject task update {update_id}: {e}")
         return redirect(url_for('view_task_updates', task_id=task['id']))
+
+    @app.route('/tasks/copy_bulk', methods=['POST'])
+    def copy_tasks_bulk():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        current_user = database.get_employee(session['user_id'])
+        raw_ids = request.form.getlist('task_ids')
+        selected_ids = []
+        for raw in raw_ids:
+            try:
+                selected_ids.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+        if not selected_ids:
+            return redirect(url_for('tasks'))
+        selected_ids = list(dict.fromkeys(selected_ids))
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
+        allowed_assignee_ids = {current_user['id']} | set(subordinate_ids)
+        assigned_to_override = None
+        override_raw = request.form.get('assigned_to_override', '').strip()
+        if override_raw:
+            try:
+                candidate = int(override_raw)
+                if candidate in allowed_assignee_ids:
+                    assigned_to_override = candidate
+            except ValueError:
+                assigned_to_override = None
+        created_count = 0
+        for task_id in selected_ids:
+            task = database.get_task(task_id)
+            if not task:
+                continue
+            can_copy = (
+                current_user.get('designation_id') == 1 or
+                task.get('assigned_by') == current_user['id'] or
+                task.get('assigned_to') == current_user['id'] or
+                task.get('assigned_to') in subordinate_ids
+            )
+            if not can_copy:
+                continue
+            new_assigned_to = assigned_to_override or task.get('assigned_to')
+            if new_assigned_to not in allowed_assignee_ids:
+                continue
+            target_value = task.get('target') or 0
+            try:
+                target_value = int(target_value)
+            except (TypeError, ValueError):
+                try:
+                    target_value = int(float(target_value))
+                except (TypeError, ValueError):
+                    target_value = 0
+            try:
+                new_task_id = database.create_task(
+                    f"{task.get('name')} (Copy)",
+                    task.get('category'),
+                    task.get('type'),
+                    task.get('start_date'),
+                    task.get('end_date'),
+                    target_value,
+                    task.get('status') or 'todo',
+                    current_user['id'],
+                    new_assigned_to,
+                    current_progress=0
+                )
+                try:
+                    database.log_task_copy(task, new_task_id, current_user['id'])
+                except Exception:
+                    pass
+                created_count += 1
+            except Exception as e:
+                print(f"[WARN] Failed to bulk copy task {task_id}: {e}")
+        return redirect(url_for('tasks'))
 
     @app.route('/tasks/<int:task_id>/update', methods=['GET', 'POST'])
     def task_update_form(task_id):
