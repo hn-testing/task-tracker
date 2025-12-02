@@ -104,6 +104,7 @@ Simple Flask app with task tracking, audit trail, copy, export, and edit feature
 
 ### Task Upload
 Route: `GET /tasks/upload` (requires login)
+Access: Available to users with the **Admin** or **Manager** role (designation_id 1 is always allowed).
 
 Download CSV template: `GET /tasks/template`
 
@@ -130,7 +131,8 @@ Behavior:
 - Recurrence interval defaults to 1 if invalid.
 
 ### Employee Upload
-Route: `GET /employees/upload` (admin only: designation_id==1)
+Route: `GET /employees/upload` (Admin/Manager only)
+Access: Available to users with the **Admin** or **Manager** role (designation_id 1 is always allowed).
 
 Download CSV template: `GET /employees/template`
 

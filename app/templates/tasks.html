@@ -75,9 +75,9 @@
         <div style="margin-bottom:16px; display:flex; gap:20px; flex-wrap:wrap; align-items:center;">
             <a href="/tasks/assign" style="display:inline-block;">Assign New Task</a>
             <a href="/tasks/export" style="display:inline-block;">Export CSV</a>
+            {% if current_user and (current_user.designation_id == 1 or current_role_name in ['Admin','Manager']) %}
             <a href="/tasks/upload" style="display:inline-block;">Upload Tasks</a>
-            <a href="/tasks/template" style="display:inline-block;">Download Task Template</a>
-            <a href="/change_password" style="display:inline-block;">Change Password</a>
+            {% endif %}
             <form method="GET" action="/tasks" style="display:flex; align-items:center; gap:8px;">
                 <label for="status_filter" style="font-weight:bold;">Status:</label>
                 <select name="status_filter" id="status_filter" onchange="this.form.submit()" style="padding:6px;">

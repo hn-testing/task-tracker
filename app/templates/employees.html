@@ -72,10 +72,9 @@
             <span style="float:right; color:#fff; font-weight:bold;">{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
         </div>
         <h1>Employee Management</h1>
-        {% if current_user and current_user.designation_id == 1 %}
+        {% if current_user and (current_user.designation_id == 1 or current_role_name in ['Admin','Manager']) %}
         <div style="margin-bottom:16px; display:flex; gap:16px; flex-wrap:wrap;">
             <a href="/employees/upload" style="display:inline-block;">Upload Employees</a>
-            <a href="/employees/template" style="display:inline-block;">Download Employee Template</a>
         </div>
         {% endif %}
         {% if error %}

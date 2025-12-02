@@ -96,6 +96,19 @@ def create_app():
             return True
         return False
 
+    def get_role_name(employee):
+        if not employee or not employee.get('role_id'):
+            return None
+        try:
+            roles = database.get_roles()
+        except Exception:
+            return None
+        role_id = employee.get('role_id')
+        for role in roles:
+            if role.get('id') == role_id:
+                return role.get('name')
+        return None
+
     @app.route('/')
     def home():
         if 'user_id' in session:
@@ -117,7 +130,18 @@ def create_app():
         roles = database.get_roles()
         departments = database.get_departments()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, valid_managers=valid_managers, branches=branches, roles=roles, departments=departments, current_user=current_user)
+        current_role_name = get_role_name(current_user)
+        return render_template(
+            'employees.html',
+            employees=employees,
+            designations=designations,
+            valid_managers=valid_managers,
+            branches=branches,
+            roles=roles,
+            departments=departments,
+            current_user=current_user,
+            current_role_name=current_role_name
+        )
 
     @app.route('/employees/create', methods=['POST'])
     def create_employee():
@@ -179,7 +203,19 @@ def create_app():
         roles = database.get_roles()
         departments = database.get_departments()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, error=error, valid_managers=valid_managers, branches=branches, roles=roles, departments=departments, current_user=current_user)
+        current_role_name = get_role_name(current_user)
+        return render_template(
+            'employees.html',
+            employees=employees,
+            designations=designations,
+            error=error,
+            valid_managers=valid_managers,
+            branches=branches,
+            roles=roles,
+            departments=departments,
+            current_user=current_user,
+            current_role_name=current_role_name
+        )
 
     @app.route('/employees/update/<int:emp_id>', methods=['GET', 'POST'])
     def update_employee(emp_id):
@@ -242,7 +278,19 @@ def create_app():
         roles = database.get_roles()
         departments = database.get_departments()
         current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
-        return render_template('employees.html', employees=employees, designations=designations, edit_employee=emp, valid_managers=valid_managers, branches=branches, roles=roles, departments=departments, current_user=current_user)
+        current_role_name = get_role_name(current_user)
+        return render_template(
+            'employees.html',
+            employees=employees,
+            designations=designations,
+            edit_employee=emp,
+            valid_managers=valid_managers,
+            branches=branches,
+            roles=roles,
+            departments=departments,
+            current_user=current_user,
+            current_role_name=current_role_name
+        )
 
     @app.route('/employees/delete/<int:emp_id>')
     def delete_employee(emp_id):
@@ -372,6 +420,7 @@ def create_app():
         all_tasks = database.get_tasks_by_employee(user_id)
         employees = database.get_employees()
         current_user = database.get_employee(user_id)
+        current_role_name = get_role_name(current_user)
         status_filter = request.args.get('status_filter','all')
         for t in all_tasks:
             current_val = t.get('current_progress') or 0
@@ -419,7 +468,8 @@ def create_app():
             current_user=current_user,
             subordinate_tasks=subordinate_tasks,
             status_filter=status_filter,
-            allowed_copy_assignees=allowed_copy_assignees
+            allowed_copy_assignees=allowed_copy_assignees,
+            current_role_name=current_role_name
         )
 
     @app.route('/tasks/export', methods=['GET'])
@@ -502,6 +552,10 @@ def create_app():
         if 'user_id' not in session:
             return redirect(url_for('login'))
         current_user = database.get_employee(session['user_id'])
+        allowed_roles = {'Admin', 'Manager'}
+        role_name = get_role_name(current_user)
+        if current_user.get('designation_id') != 1 and role_name not in allowed_roles:
+            return redirect(url_for('tasks'))
         employees = database.get_employees()
         subordinate_ids = []
         if hasattr(database,'get_subordinate_employee_ids'):
@@ -595,7 +649,9 @@ def create_app():
         if 'user_id' not in session:
             return redirect(url_for('login'))
         current_user = database.get_employee(session['user_id'])
-        if current_user['designation_id'] != 1:
+        allowed_roles = {'Admin', 'Manager'}
+        role_name = get_role_name(current_user)
+        if current_user.get('designation_id') != 1 and role_name not in allowed_roles:
             return redirect(url_for('employees'))
         designations = {d['title']: d['id'] for d in database.get_designations()}
         employees = database.get_employees()
