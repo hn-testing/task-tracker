@@ -16,6 +16,23 @@
         .menu a { color: #fff; margin-right: 20px; text-decoration: none; font-weight: bold; }
         .menu a:hover { text-decoration: underline; }
         .menu span { margin-left: auto; }
+        .update-actions { display: flex; flex-direction: column; gap: 6px; }
+        .update-actions a, .update-actions button { display: inline-block; }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); display: none; align-items: center; justify-content: center; z-index: 999; padding: 16px; }
+        .modal-backdrop.active { display: flex; }
+        .modal-window { background: #fff; width: 100%; max-width: 520px; border-radius: 8px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3); padding: 24px; position: relative; }
+        .modal-window h2 { margin-top: 0; }
+        .modal-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 1.5rem; cursor: pointer; }
+        .modal-form { display: flex; flex-direction: column; gap: 12px; }
+        .modal-form label { font-weight: bold; }
+        .modal-form input, .modal-form select, .modal-form textarea { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
+        .modal-form textarea { min-height: 80px; resize: vertical; }
+        .modal-info { font-size: 0.9rem; color: #4b5563; margin-bottom: 12px; }
+        .modal-help { font-size: 0.85rem; color: #6b7280; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; }
+        .modal-actions button { padding: 8px 16px; cursor: pointer; border-radius: 4px; border: none; }
+        .modal-actions .cancel-btn { background: #e5e7eb; color: #1f2937; }
+        .modal-actions .submit-btn { background: #2563eb; color: #fff; }
         @media (max-width: 1000px) {
             .container { max-width: 98vw; }
         }
@@ -77,7 +94,7 @@
                 <th>Progress (%)</th>
                 <th>Assigned By</th>
                 <th>Assigned To</th>
-                <th>Update</th>
+                <th>Updates</th>
                 <th>Edit</th>
                 <th>Copy</th>
                 <th>Audit</th>
@@ -97,16 +114,10 @@
                 <td>{{ task['assigned_by_name'] }}</td>
                 <td>{{ task['employee_name'] }}</td>
                 <td>
-                    <form method="POST" action="/tasks/update_progress/{{ task['id'] }}">
-                        <input type="number" name="current_progress" min="0" max="{{ task['target'] }}" value="{{ task['current_progress'] }}" required>
-                        <select name="status" required>
-                            <option value="todo" {% if task['status'] == 'todo' %}selected{% endif %}>To Do</option>
-                            <option value="in progress" {% if task['status'] == 'in progress' %}selected{% endif %}>In Progress</option>
-                            <option value="completed" {% if task['status'] == 'completed' %}selected{% endif %}>Completed</option>
-                            <option value="blocked" {% if task['status'] == 'blocked' %}selected{% endif %}>Blocked</option>
-                        </select>
-                        <button type="submit">Update</button>
-                    </form>
+                    <div class="update-actions">
+                        <a href="/tasks/{{ task['id'] }}/update" style="padding:6px 10px; background:#2563eb; color:#fff; border-radius:4px; text-decoration:none; text-align:center;">Log Update</a>
+                        <a href="/tasks/{{ task['id'] }}/updates">View Updates</a>
+                    </div>
                 </td>
                 <td>
                     {% if current_user and (current_user.id == task['assigned_by'] or current_user.designation_id == 1) %}
@@ -136,6 +147,7 @@
                 <th>Edit</th>
                 <th>Copy</th>
                 <th>Audit</th>
+                <th>Updates</th>
             </tr>
             {% for task in subordinate_tasks %}
             <tr>
@@ -158,6 +170,7 @@
                 </td>
                 <td><a href="/tasks/copy/{{ task['id'] }}">Copy</a></td>
                 <td><a href="/tasks/audit/{{ task['id'] }}">Audit</a></td>
+                <td><a href="/tasks/{{ task['id'] }}/updates">View</a></td>
             </tr>
             {% endfor %}
         </table>

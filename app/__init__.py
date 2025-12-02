@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session
 import os
 from datetime import date
 from collections import Counter
+from decimal import Decimal, InvalidOperation
 from dotenv import load_dotenv
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 env_path = os.path.join(BASE_DIR, '.env')
@@ -27,16 +28,38 @@ def create_app():
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM designations')
     if cur.fetchone()[0] == 0:
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('CEO', None))
+        chairman_id = None
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('Chairman',))
+        row = cur.fetchone()
+        if row:
+            chairman_id = row[0]
+        else:
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Chairman', None))
+            chairman_id = cur.fetchone()[0]
         cur.execute('SELECT id FROM designations WHERE title=%s', ('CEO',))
-        ceo_id = cur.fetchone()[0]
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Head of Department', ceo_id))
+        row = cur.fetchone()
+        if row:
+            ceo_id = row[0]
+        else:
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('CEO', chairman_id))
+            ceo_id = cur.fetchone()[0]
         cur.execute('SELECT id FROM designations WHERE title=%s', ('Head of Department',))
-        hod_id = cur.fetchone()[0]
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Manager', hod_id))
+        row = cur.fetchone()
+        if row:
+            hod_id = row[0]
+        else:
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Head of Department', ceo_id))
+            hod_id = cur.fetchone()[0]
         cur.execute('SELECT id FROM designations WHERE title=%s', ('Manager',))
-        manager_id = cur.fetchone()[0]
-        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
+        row = cur.fetchone()
+        if row:
+            manager_id = row[0]
+        else:
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Manager', hod_id))
+            manager_id = cur.fetchone()[0]
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('Staff',))
+        if not cur.fetchone():
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
         conn.commit()
     conn.close()
 
@@ -258,7 +281,13 @@ def create_app():
         current_user = database.get_employee(user_id)
         status_filter = request.args.get('status_filter','all')
         for t in all_tasks:
-            t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+            current_val = t.get('current_progress') or 0
+            try:
+                current_val = float(current_val)
+            except (TypeError, ValueError):
+                current_val = 0.0
+            t['current_progress'] = current_val
+            t['progress'] = (current_val / t['target'] * 100) if t['target'] else 0
         # Get subordinates based on managerial tree (not just designation level)
         subordinate_ids = []
         if hasattr(database, 'get_subordinate_employee_ids'):
@@ -269,7 +298,13 @@ def create_app():
             emp_tasks = database.get_tasks_by_employee(emp['id'])
             for t in emp_tasks:
                 t['employee_name'] = emp['name']
-                t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+                current_val = t.get('current_progress') or 0
+                try:
+                    current_val = float(current_val)
+                except (TypeError, ValueError):
+                    current_val = 0.0
+                t['current_progress'] = current_val
+                t['progress'] = (current_val / t['target'] * 100) if t['target'] else 0
                 subordinate_tasks.append(t)
         if status_filter and status_filter != 'all':
             all_tasks = [t for t in all_tasks if t.get('status') == status_filter]
@@ -286,7 +321,13 @@ def create_app():
         # own tasks
         own_tasks = database.get_tasks_by_employee(user_id)
         for t in own_tasks:
-            t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+            current_val = t.get('current_progress') or 0
+            try:
+                current_val = float(current_val)
+            except (TypeError, ValueError):
+                current_val = 0.0
+            t['current_progress'] = current_val
+            t['progress'] = (current_val / t['target'] * 100) if t['target'] else 0
         # subordinate tasks via managerial tree
         subordinate_ids = []
         if hasattr(database, 'get_subordinate_employee_ids'):
@@ -297,7 +338,13 @@ def create_app():
             emp_tasks = database.get_tasks_by_employee(emp['id'])
             for t in emp_tasks:
                 t['employee_name'] = emp['name']
-                t['progress'] = (t['current_progress'] / t['target'] * 100) if t['target'] else 0
+                current_val = t.get('current_progress') or 0
+                try:
+                    current_val = float(current_val)
+                except (TypeError, ValueError):
+                    current_val = 0.0
+                t['current_progress'] = current_val
+                t['progress'] = (current_val / t['target'] * 100) if t['target'] else 0
                 subordinate_tasks.append(t)
         all_export_tasks = own_tasks + subordinate_tasks
         import csv, io, datetime
@@ -563,19 +610,102 @@ def create_app():
 
     @app.route('/tasks/update_progress/<int:task_id>', methods=['POST'])
     def update_task_progress(task_id):
-        current_progress = int(request.form['current_progress'])
-        status = request.form['status']
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        status_input = request.form.get('status','').strip()
+        update_value_raw = request.form.get('update_value','').strip()
+        customer_name = request.form.get('customer_name','').strip()
+        customer_location = request.form.get('customer_location','').strip()
+        customer_business_nature = request.form.get('customer_business_nature','').strip()
+        customer_response = request.form.get('customer_response','').strip()
+        remarks = request.form.get('remarks','').strip()
+        try:
+            update_value = Decimal(update_value_raw) if update_value_raw else Decimal('0')
+        except (InvalidOperation, TypeError):
+            update_value = Decimal('0')
         # Update task progress/status using active Postgres backend
         task = database.get_task(task_id)
         if task:
-            # Basic validation bounds
-            if current_progress < 0:
-                current_progress = 0
-            if task.get('target') and current_progress > task['target']:
-                current_progress = task['target']
+            status = status_input or task.get('status') or 'todo'
             changed_by = session.get('user_id')
-            database.update_task_progress_and_status(task_id, current_progress, status, changed_by)
+            try:
+                total_progress = database.create_task_update(
+                    task_id,
+                    changed_by,
+                    update_value,
+                    status,
+                    customer_name,
+                    customer_location,
+                    customer_business_nature,
+                    customer_response,
+                    remarks
+                )
+                database.update_task_progress_and_status(task_id, total_progress, status, changed_by)
+            except Exception as e:
+                print(f"[WARN] Failed to log task update: {e}")
         return redirect(url_for('tasks'))
+
+    @app.route('/tasks/<int:task_id>/updates', methods=['GET'])
+    def view_task_updates(task_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        task = database.get_task(task_id)
+        if not task:
+            return redirect(url_for('tasks'))
+        updates = database.get_task_updates(task_id)
+        total_progress = database.get_task_update_total(task_id)
+        current_user = database.get_employee(session['user_id'])
+        employees = database.get_employees()
+        emp_map = {e['id']: e['name'] for e in employees}
+        assigned_to_name = emp_map.get(task['assigned_to'], task['assigned_to']) if task.get('assigned_to') else ''
+        for update in updates:
+            if not update.get('updated_by_name') and update.get('updated_by'):
+                update['updated_by_name'] = emp_map.get(update['updated_by'], update['updated_by'])
+        return render_template('task_updates.html', task=task, updates=updates, assigned_to_name=assigned_to_name, total_progress=total_progress, current_user=current_user)
+
+    @app.route('/tasks/<int:task_id>/update', methods=['GET', 'POST'])
+    def task_update_form(task_id):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        task = database.get_task(task_id)
+        if not task:
+            return redirect(url_for('tasks'))
+        employees = database.get_employees()
+        current_user = database.get_employee(session['user_id'])
+        emp_map = {e['id']: e['name'] for e in employees}
+        assigned_to_name = emp_map.get(task['assigned_to'], task['assigned_to']) if task.get('assigned_to') else ''
+        total_progress = database.get_task_update_total(task_id)
+        if request.method == 'POST':
+            status_input = request.form.get('status','').strip()
+            update_value_raw = request.form.get('update_value','').strip()
+            customer_name = request.form.get('customer_name','').strip()
+            customer_location = request.form.get('customer_location','').strip()
+            customer_business_nature = request.form.get('customer_business_nature','').strip()
+            customer_response = request.form.get('customer_response','').strip()
+            remarks = request.form.get('remarks','').strip()
+            try:
+                update_value = Decimal(update_value_raw) if update_value_raw else Decimal('0')
+            except (InvalidOperation, TypeError):
+                update_value = Decimal('0')
+            status = status_input or task.get('status') or 'todo'
+            changed_by = current_user['id']
+            try:
+                total_progress = database.create_task_update(
+                    task_id,
+                    changed_by,
+                    update_value,
+                    status,
+                    customer_name,
+                    customer_location,
+                    customer_business_nature,
+                    customer_response,
+                    remarks
+                )
+                database.update_task_progress_and_status(task_id, total_progress, status, changed_by)
+            except Exception as e:
+                print(f"[WARN] Failed to log task update: {e}")
+            return redirect(url_for('view_task_updates', task_id=task_id))
+        return render_template('task_update_form.html', task=task, assigned_to_name=assigned_to_name, total_progress=total_progress, current_user=current_user)
 
     @app.route('/tasks/edit/<int:task_id>', methods=['GET','POST'])
     def edit_task(task_id):

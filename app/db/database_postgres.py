@@ -140,6 +140,35 @@ def get_task(task_id):
         cur.execute('SELECT * FROM tasks WHERE id=%s',(task_id,))
         return cur.fetchone()
 
+def create_task_update(task_id, updated_by, update_value, status, customer_name, customer_location, business_nature, customer_response, remarks):
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('''INSERT INTO task_updates (task_id, updated_by, update_value, status, customer_name, customer_location, customer_business_nature, customer_response, remarks)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''',
+                    (task_id, updated_by, update_value, status, customer_name, customer_location, business_nature, customer_response, remarks))
+        update_id = cur.fetchone()[0]
+        cur.execute('SELECT COALESCE(SUM(update_value), 0) FROM task_updates WHERE task_id=%s', (task_id,))
+        total_progress = cur.fetchone()[0] or 0
+        cur.execute('UPDATE task_updates SET current_progress=%s WHERE id=%s', (total_progress, update_id))
+        conn.commit()
+        return total_progress
+
+def get_task_update_total(task_id):
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('SELECT COALESCE(SUM(update_value), 0) FROM task_updates WHERE task_id=%s', (task_id,))
+        total = cur.fetchone()[0]
+        return total or 0
+
+def get_task_updates(task_id):
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute('''SELECT tu.id, tu.task_id, tu.updated_by, tu.update_value, tu.current_progress, tu.status, tu.customer_name,
+                               tu.customer_location, tu.customer_business_nature, tu.customer_response, tu.remarks,
+                               tu.created_at, e.name AS updated_by_name
+                       FROM task_updates tu
+                       LEFT JOIN employees e ON tu.updated_by = e.id
+                       WHERE tu.task_id=%s
+                       ORDER BY tu.created_at DESC, tu.id DESC''', (task_id,))
+        return cur.fetchall()
+
 def update_task_progress_and_status(task_id, current_progress, status, changed_by=None):
     with connect_db() as conn, conn.cursor() as cur:
         cur.execute('SELECT current_progress, status FROM tasks WHERE id=%s',(task_id,))
@@ -235,7 +264,8 @@ def ensure_sequences():
             ('departments','departments_id_seq'),
             ('employees','employees_id_seq'),
             ('tasks','tasks_id_seq'),
-            ('task_audit','task_audit_id_seq')
+            ('task_audit','task_audit_id_seq'),
+            ('task_updates','task_updates_id_seq')
         ]:
             try:
                 cur.execute(f"SELECT COALESCE(MAX(id),0) FROM {table}")

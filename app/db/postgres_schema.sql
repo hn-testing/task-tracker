@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     target INTEGER NOT NULL,
-    current_progress INTEGER DEFAULT 0,
+    current_progress NUMERIC DEFAULT 0,
     status TEXT NOT NULL,
     assigned_by INTEGER NOT NULL REFERENCES employees(id),
     assigned_to INTEGER NOT NULL REFERENCES employees(id)
@@ -78,8 +78,32 @@ CREATE TABLE IF NOT EXISTS task_recurrence (
     last_generated_task_id INTEGER NULL REFERENCES tasks(id)
 );
 
+CREATE TABLE IF NOT EXISTS task_updates (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    updated_by INTEGER REFERENCES employees(id),
+    update_value NUMERIC DEFAULT 0,
+    current_progress NUMERIC,
+    status TEXT,
+    customer_name TEXT,
+    customer_location TEXT,
+    customer_business_nature TEXT,
+    customer_response TEXT,
+    remarks TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 ALTER TABLE employees
     ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES roles(id);
 
 ALTER TABLE employees
     ADD COLUMN IF NOT EXISTS department_id INTEGER REFERENCES departments(id);
+
+ALTER TABLE tasks
+    ALTER COLUMN current_progress TYPE NUMERIC USING current_progress::numeric;
+
+ALTER TABLE task_updates
+    ADD COLUMN IF NOT EXISTS update_value NUMERIC DEFAULT 0;
+
+ALTER TABLE task_updates
+    ALTER COLUMN current_progress TYPE NUMERIC USING current_progress::numeric;
