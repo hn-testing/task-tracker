@@ -29,6 +29,7 @@
         .reject-form button { background: #dc2626; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
         .reject-form button:hover { background: #b91c1c; }
         .approve-note { font-size: 0.85rem; color: #6b7280; margin-top: 6px; }
+        .approve-note.rejected { color: #b91c1c; font-weight: 600; }
         @media (max-width: 768px) {
             .container { padding: 12px; max-width: 98vw; }
             table, th, td { font-size: 0.9em; }
@@ -84,7 +85,9 @@
                 <td>{{ update['update_value'] or '-' }}</td>
                 <td>
                     {{ update['current_progress'] }}
-                    {% if not update['approved'] and update['update_value'] %}
+                    {% if update['rejected'] %}
+                    <div class="approve-note rejected">Rejected</div>
+                    {% elif not update['approved'] and update['update_value'] %}
                     <div class="approve-note">+{{ update['update_value'] }} pending</div>
                     {% endif %}
                 </td>
