@@ -115,15 +115,15 @@ Template Columns:
 | name | Yes | Task name |
 | category | Yes | personal or team |
 | type | Yes | Arbitrary type label |
-| start_date | Yes | YYYY-MM-DD |
-| end_date | Yes | YYYY-MM-DD |
+| start_date | Yes | DD-MM-YYYY |
+| end_date | Yes | DD-MM-YYYY |
 | target | Yes | Integer target value |
 | status | Yes | todo / in progress / completed / blocked |
 | assigned_to | Yes | Employee id OR email; must be you or a subordinate |
 | current_progress | No | Defaults 0 if blank |
 | recurrence_frequency | No | daily/weekly/monthly/yearly to create template |
 | recurrence_interval | No | Integer (defaults 1) |
-| recurrence_stop_date | No | YYYY-MM-DD; template deactivates after this date |
+| recurrence_stop_date | No | DD-MM-YYYY; template deactivates after this date |
 
 Behavior:
 - Each row creates the initial task plus (if recurrence_frequency provided) a recurrence template for future tasks.

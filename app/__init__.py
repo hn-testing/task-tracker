@@ -610,10 +610,10 @@ def create_app():
                             errors.append(f'Row {i}: current_progress must be integer.')
                             continue
                         try:
-                            datetime.date.fromisoformat(start_date)
-                            datetime.date.fromisoformat(end_date)
+                            start_date_obj = datetime.datetime.strptime(start_date, '%d-%m-%Y').date()
+                            end_date_obj = datetime.datetime.strptime(end_date, '%d-%m-%Y').date()
                         except Exception:
-                            errors.append(f'Row {i}: invalid date format (YYYY-MM-DD expected).')
+                            errors.append(f'Row {i}: invalid date format (DD-MM-YYYY expected).')
                             continue
                         assigned_to_id = None
                         if assigned_to.isdigit():
@@ -628,9 +628,11 @@ def create_app():
                         if assigned_to_id not in allowed_assignees:
                             errors.append(f'Row {i}: assigned_to not in your subordinate tree or self.')
                             continue
+                        start_date_iso = start_date_obj.isoformat()
+                        end_date_iso = end_date_obj.isoformat()
                         new_task_id = None
                         try:
-                            new_task_id = database.create_task(name, category, type_, start_date, end_date, target_int, status, current_user['id'], assigned_to_id, current_progress=current_progress_int)
+                            new_task_id = database.create_task(name, category, type_, start_date_iso, end_date_iso, target_int, status, current_user['id'], assigned_to_id, current_progress=current_progress_int)
                             created += 1
                         except Exception:
                             errors.append(f'Row {i}: DB error creating task.')
@@ -643,10 +645,15 @@ def create_app():
                                     interval_val = int(rec_interval_raw)
                                 except Exception:
                                     errors.append(f'Row {i}: recurrence_interval invalid, defaulting to 1.')
-                            stop_date_val = rec_stop_date if rec_stop_date else None
+                            stop_date_val = None
+                            if rec_stop_date:
+                                try:
+                                    stop_date_val = datetime.datetime.strptime(rec_stop_date, '%d-%m-%Y').date().isoformat()
+                                except Exception:
+                                    errors.append(f'Row {i}: recurrence_stop_date invalid format (DD-MM-YYYY expected).')
                             try:
                                 if hasattr(database,'create_recurring_template_from_existing'):
-                                    database.create_recurring_template_from_existing(name, category, type_, start_date, end_date, target_int, status, current_user['id'], assigned_to_id, new_task_id, rec_freq, interval_val, stop_date_val)
+                                    database.create_recurring_template_from_existing(name, category, type_, start_date_iso, end_date_iso, target_int, status, current_user['id'], assigned_to_id, new_task_id, rec_freq, interval_val, stop_date_val)
                             except Exception:
                                 errors.append(f'Row {i}: failed to create recurrence template.')
                     result = f"Created {created} task(s)."

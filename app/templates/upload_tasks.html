@@ -38,7 +38,7 @@
     </div>
     <h1>Bulk Upload Tasks</h1>
     <p>Upload a CSV following the template. <a href="/tasks/template">Download Template</a></p>
-    <p><strong>Columns:</strong> name, category (personal/team), type, start_date (YYYY-MM-DD), end_date (YYYY-MM-DD), target, status (todo/in progress/completed/blocked), assigned_to (id or email), current_progress, recurrence_frequency (daily/weekly/monthly/yearly optional), recurrence_interval (integer optional), recurrence_stop_date (YYYY-MM-DD optional)</p>
+    <p><strong>Columns:</strong> name, category (personal/team), type, start_date (DD-MM-YYYY), end_date (DD-MM-YYYY), target, status (todo/in progress/completed/blocked), assigned_to (id or email), current_progress, recurrence_frequency (daily/weekly/monthly/yearly optional), recurrence_interval (integer optional), recurrence_stop_date (DD-MM-YYYY optional)</p>
     {% if result %}<div class="result">{{ result }}</div>{% endif %}
     {% if errors and errors|length > 0 %}
     <div class="errors">
