@@ -12,13 +12,13 @@
         .menu { background: #007bff; padding: 12px; border-radius: 8px 8px 0 0; margin-bottom: 32px; display: flex; flex-wrap: wrap; align-items: center; }
         .menu a { color: #fff; margin-right: 20px; text-decoration: none; font-weight: bold; }
         .menu a:hover { text-decoration: underline; }
-        .menu span { margin-left: auto; }
+        .menu-user { margin-left: auto; }
         @media (max-width: 768px) {
             .container { padding: 8px; }
             h1 { font-size: 1.5em; }
             p { font-size: 1em; }
             .menu { flex-direction: column; align-items: flex-start; }
-            .menu a, .menu span { margin: 8px 0; }
+            .menu a, .menu-user { margin: 8px 0; }
         }
         @media (max-width: 1000px) {
             .container { max-width: 98vw; }
@@ -34,15 +34,22 @@
     <div class="container">
         <div class="menu">
             <a href="/">Home</a>
-            {% if current_user and current_user.designation_id == 1 %}
-            <a href="/employees">Employees</a>
+            {% if current_user %}
+                {% if current_user.designation_id == 1 %}
+                <a href="/employees">Employees</a>
+                {% endif %}
+                <a href="/tasks">Tasks</a>
+                <a href="/tasks/assign">Assign Task</a>
+                <a href="/tasks/report">Task Report</a>
+                <a href="/change_password">Change Password</a>
+                <span class="menu-user">
+                    <a href="/profile">{{ current_user.name }}</a>
+                    <span class="menu-separator">|</span>
+                    <a href="/logout">Logout</a>
+                </span>
+            {% else %}
+                <a href="/login">Login</a>
             {% endif %}
-            <a href="/tasks">Tasks</a>
-            <a href="/tasks/assign">Assign Task</a>
-            <a href="/tasks/report">Task Report</a>
-            <a href="/profile">My Profile</a>
-            <a href="/change_password">Change Password</a>
-            <span style="float:right; color:#fff; font-weight:bold;">{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
         </div>
         <h1>Welcome to Task Tracker</h1>
         <p>Your all-in-one solution for managing employees, assigning tasks, and tracking progress.<br>

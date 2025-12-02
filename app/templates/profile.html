@@ -11,7 +11,7 @@
         .menu { background: #007bff; padding: 12px; border-radius: 8px 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; }
         .menu a { color: #fff; margin-right: 20px; text-decoration: none; font-weight: bold; }
         .menu a:hover { text-decoration: underline; }
-        .menu span { margin-left: auto; color: #fff; font-weight: bold; }
+        .menu-user { margin-left: auto; color: #fff; font-weight: bold; }
         .insight-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 24px 0; }
         .insight-card { background: #f1f5ff; border-radius: 8px; padding: 16px; border: 1px solid #e0e7ff; }
         .insight-title { font-size: 0.85rem; text-transform: uppercase; color: #4b5563; margin-bottom: 6px; letter-spacing: 0.05em; }
@@ -31,7 +31,7 @@
         @media (max-width: 768px) {
             .container { padding: 12px; max-width: 100vw; }
             .menu { flex-direction: column; align-items: flex-start; }
-            .menu a, .menu span { margin: 8px 0; }
+            .menu a, .menu-user { margin: 8px 0; }
         }
         @media (max-width: 480px) {
             h1 { font-size: 1.3em; }
@@ -49,9 +49,12 @@
             <a href="/tasks">Tasks</a>
             <a href="/tasks/assign">Assign Task</a>
             <a href="/tasks/report">Task Report</a>
-            <a href="/profile">My Profile</a>
             <a href="/change_password">Change Password</a>
-            <span>{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
+            <span class="menu-user">
+                <a href="/profile">{{ current_user.name }}</a>
+                <span class="menu-separator">|</span>
+                <a href="/logout">Logout</a>
+            </span>
         </div>
         <h1>My Profile</h1>
         <div class="profile-details">

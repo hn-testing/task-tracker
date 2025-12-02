@@ -15,7 +15,7 @@
         .menu { background:#007bff; padding:12px; border-radius:8px 8px 0 0; display:flex; flex-wrap:wrap; align-items:center; }
         .menu a { color:#fff; margin-right:20px; text-decoration:none; font-weight:bold; }
         .menu a:hover { text-decoration:underline; }
-        .menu span { margin-left:auto; color:#fff; font-weight:bold; }
+        .menu-user { margin-left:auto; color:#fff; font-weight:bold; }
         @media (max-width:768px){ .container { padding:12px; } }
     </style>
 </head>
@@ -27,8 +27,11 @@
         <a href="/tasks">Tasks</a>
         <a href="/tasks/assign">Assign Task</a>
         <a href="/tasks/report">Task Report</a>
-        <a href="/profile">My Profile</a>
-        <span>{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
+        <span class="menu-user">
+            <a href="/profile">{{ current_user.name }}</a>
+            <span class="menu-separator">|</span>
+            <a href="/logout">Logout</a>
+        </span>
     </div>
     <h1>Edit Task #{{ task.id }}</h1>
     <form method="POST">
