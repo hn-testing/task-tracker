@@ -287,6 +287,66 @@ def create_app():
                     error = 'Failed to update password.'
         return render_template('change_password.html', current_user=current_user, error=error, success=success)
 
+    @app.route('/profile', methods=['GET'])
+    def profile():
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        user_id = session['user_id']
+        current_user = database.get_employee(user_id)
+        employees = database.get_employees()
+        profile_entry = next((e for e in employees if e['id'] == user_id), None)
+        manager_name = profile_entry.get('manager_name') if profile_entry else None
+        designation_name = profile_entry.get('designation') if profile_entry else None
+        branch_name = profile_entry.get('branch_name') if profile_entry else None
+        role_name = profile_entry.get('role_name') if profile_entry else None
+        department_name = profile_entry.get('department_name') if profile_entry else None
+        direct_reports = [e for e in employees if e.get('manager_id') == user_id]
+        subordinate_ids = []
+        if hasattr(database, 'get_subordinate_employee_ids'):
+            subordinate_ids = database.get_subordinate_employee_ids(user_id)
+        team_size = len(subordinate_ids)
+        my_tasks = database.get_tasks_by_employee(user_id)
+        total_tasks = len(my_tasks)
+        completed_tasks = sum(1 for t in my_tasks if str(t.get('status','')).lower() == 'completed')
+        active_tasks = sum(1 for t in my_tasks if str(t.get('status','')).lower() in {'todo', 'in progress', 'blocked'})
+        progress_values = []
+        for t in my_tasks:
+            current_progress = t.get('current_progress') or 0
+            target = t.get('target') or 0
+            try:
+                current_progress = float(current_progress)
+            except (TypeError, ValueError):
+                current_progress = 0.0
+            try:
+                target = float(target)
+            except (TypeError, ValueError):
+                target = 0.0
+            pct = (current_progress / target * 100) if target else 0.0
+            progress_values.append(pct)
+        avg_progress = sum(progress_values) / len(progress_values) if progress_values else 0.0
+        pending_updates_total = 0
+        task_ids = [t.get('id') for t in my_tasks if t.get('id')]
+        if task_ids:
+            pending_counts = database.get_pending_update_counts(task_ids)
+            pending_updates_total = sum(pending_counts.values())
+        return render_template(
+            'profile.html',
+            current_user=current_user,
+            profile=profile_entry or current_user,
+            manager_name=manager_name,
+            designation_name=designation_name,
+            branch_name=branch_name,
+            role_name=role_name,
+            department_name=department_name,
+            direct_reports=direct_reports,
+            team_size=team_size,
+            total_tasks=total_tasks,
+            completed_tasks=completed_tasks,
+            active_tasks=active_tasks,
+            avg_progress=avg_progress,
+            pending_updates_total=pending_updates_total
+        )
+
     @app.route('/tasks', methods=['GET'])
     def tasks():
         if 'user_email' not in session:
