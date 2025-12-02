@@ -9,6 +9,8 @@
         .container { width: 100%; max-width: 900px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
         h1 { color: #333; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .table-wrapper { width: 100%; overflow-x: auto; }
+        .table-wrapper table { min-width: 960px; }
         th, td { padding: 10px; border: 1px solid #dee2e6; text-align: left; }
         th { background: #007bff; color: #fff; }
         tr:nth-child(even) { background: #f2f2f2; }
@@ -149,6 +151,7 @@
                 {% endif %}
             </ul>
         </div>
+        <div class="table-wrapper">
         <table>
             <tr>
                 <th>Task Name</th>
@@ -179,7 +182,9 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <h2 style="margin-top:32px;">Top 5 Team Achievers</h2>
+        <div class="table-wrapper">
         <table>
             <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
             {% for emp in top5_team %}
@@ -190,7 +195,9 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <h2 style="margin-top:24px;">Bottom 5 Team Achievers</h2>
+        <div class="table-wrapper">
         <table>
             <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
             {% for emp in bottom5_team %}
@@ -201,7 +208,9 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <h2 style="margin-top:32px;">Top 5 Personal Achievers</h2>
+        <div class="table-wrapper">
         <table>
             <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
             {% for emp in top5_personal %}
@@ -212,7 +221,9 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <h2 style="margin-top:24px;">Bottom 5 Personal Achievers</h2>
+        <div class="table-wrapper">
         <table>
             <tr><th>Name</th><th>Target Achieved (%)</th><th>Number of Tasks</th></tr>
             {% for emp in bottom5_personal %}
@@ -223,6 +234,7 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <script id="report-data" type="application/json">{{ {
             'branch_labels': branch_labels,
             'branch_avg_progress': branch_avg_progress,

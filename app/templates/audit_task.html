@@ -9,6 +9,8 @@
         .container { width:100%; max-width:1000px; margin:40px auto; background:#fff; padding:24px; border-radius:8px; box-shadow:0 2px 8px #ccc; }
         h1 { color:#333; }
         table { width:100%; border-collapse:collapse; margin-top:20px; }
+        .table-wrapper { width:100%; overflow-x:auto; }
+        .table-wrapper table { min-width:960px; }
         th, td { padding:8px; border:1px solid #ddd; font-size:0.9em; }
         th { background:#007bff; color:#fff; }
         tr:nth-child(even){ background:#f2f2f2; }
@@ -30,6 +32,7 @@
         <span>{{ current_user.name }} | <a href="/logout" style="color:#fff;">Logout</a></span>
     </div>
     <h1>Audit Trail for Task #{{ task.id }} ({{ task.name }})</h1>
+    <div class="table-wrapper">
     <table>
         <tr>
             <th>ID</th>
@@ -52,6 +55,7 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     <a href="/tasks" style="display:inline-block; margin-top:16px;">Back to Tasks</a>
 </div>
 </body>

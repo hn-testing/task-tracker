@@ -9,6 +9,8 @@
         .container { width: 100%; max-width: 900px; margin: 40px auto; background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
         h1 { color: #333; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .table-wrapper { width: 100%; overflow-x: auto; }
+        .table-wrapper table { min-width: 960px; }
         th, td { padding: 10px; border: 1px solid #dee2e6; text-align: left; }
         th { background: #007bff; color: #fff; }
         tr:nth-child(even) { background: #f2f2f2; }
@@ -99,6 +101,7 @@
                 </select>
             </div>
         </form>
+        <div class="table-wrapper">
         <table>
             <tr>
                 <th>Select</th>
@@ -155,7 +158,9 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
         <h2 style="margin-top:40px;">Subordinate Tasks</h2>
+        <div class="table-wrapper">
         <table>
             <tr>
                 <th>Select</th>
@@ -209,6 +214,7 @@
             </tr>
             {% endfor %}
         </table>
+        </div>
     </div>
 </body>
 </html>
