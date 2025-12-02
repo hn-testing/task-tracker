@@ -109,13 +109,23 @@ def create_app():
                 return role.get('name')
         return None
 
+    @app.context_processor
+    def inject_user_context():
+        current_user = database.get_employee(session['user_id']) if 'user_id' in session else None
+        current_role_name = get_role_name(current_user)
+        return {
+            'current_user': current_user,
+            'current_role_name': current_role_name
+        }
+
     @app.route('/')
     def home():
         if 'user_id' in session:
             current_user = database.get_employee(session['user_id'])
         else:
             current_user = None
-        return render_template('index.html', current_user=current_user)
+        current_role_name = get_role_name(current_user)
+        return render_template('index.html', current_user=current_user, current_role_name=current_role_name)
 
     @app.route('/hello')
     def hello_world():

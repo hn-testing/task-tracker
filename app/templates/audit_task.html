@@ -25,7 +25,9 @@
 <div class="container">
     <div class="menu">
         <a href="/">Home</a>
-        {% if current_user and current_user.designation_id == 1 %}<a href="/employees">Employees</a>{% endif %}
+        {% if current_user and (current_user.designation_id == 1 or current_role_name == 'Admin') %}
+        <a href="/employees">Employees</a>
+        {% endif %}
         <a href="/tasks">Tasks</a>
         <a href="/tasks/assign">Assign Task</a>
         <a href="/tasks/report">Task Report</a>
