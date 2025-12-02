@@ -162,6 +162,23 @@ def create_task_update(task_id, updated_by, update_value, status, customer_name,
                     (task_id, updated_by, update_value, status, customer_name, customer_location, business_nature, customer_response, remarks))
         update_id = cur.fetchone()[0]
         _sync_task_update_progress(cur, task_id)
+        details = [f"Update #{update_id} logged", f"value={update_value}" if update_value is not None else "value=0"]
+        if status:
+            details.append(f"status={status}")
+        if customer_name:
+            details.append(f"customer={customer_name}")
+        if customer_location:
+            details.append(f"location={customer_location}")
+        if business_nature:
+            details.append(f"nature={business_nature}")
+        if customer_response:
+            details.append(f"response={customer_response}")
+        if remarks:
+            details.append(f"remarks={remarks}")
+        details.append("awaiting approval")
+        description = '; '.join(details)
+        cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                       VALUES (%s,'log_update','task_update',NULL,%s,%s)''', (task_id, description, updated_by))
         conn.commit()
         return update_id
 
@@ -211,16 +228,23 @@ def approve_task_update(update_id, approver_id):
                            rejection_comment=NULL
                        WHERE id=%s''', (approver_id, datetime.utcnow(), update_id))
         total_progress = _sync_task_update_progress(cur, task_id)
+        details = [f"Update #{update_id} approved", f"value={update_value}" if update_value is not None else "value=0"]
+        if status:
+            details.append(f"status={status}")
+        details.append(f"total_progress={total_progress}")
+        description = '; '.join(details)
+        cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                       VALUES (%s,'approve_update','task_update','pending',%s,%s)''', (task_id, description, approver_id))
         conn.commit()
         return task_id, total_progress, status
 
 def reject_task_update(update_id, approver_id, comment):
     with connect_db() as conn, conn.cursor() as cur:
-        cur.execute('SELECT task_id, status FROM task_updates WHERE id=%s', (update_id,))
+        cur.execute('SELECT task_id, status, update_value FROM task_updates WHERE id=%s', (update_id,))
         row = cur.fetchone()
         if not row:
             raise ValueError('Update not found')
-        task_id, status = row
+        task_id, status, update_value = row
         cur.execute('''UPDATE task_updates
                        SET approved=FALSE,
                            approved_by=NULL,
@@ -232,6 +256,17 @@ def reject_task_update(update_id, approver_id, comment):
                        WHERE id=%s''', (approver_id, datetime.utcnow(), comment, update_id))
         total_progress = _sync_task_update_progress(cur, task_id)
         cur.execute('UPDATE task_updates SET current_progress=%s WHERE id=%s', (total_progress, update_id))
+        details = [f"Update #{update_id} rejected"]
+        if update_value is not None:
+            details.append(f"value={update_value}")
+        if status:
+            details.append(f"status={status}")
+        if comment:
+            details.append(f"comment={comment}")
+        details.append(f"total_progress={total_progress}")
+        description = '; '.join(details)
+        cur.execute('''INSERT INTO task_audit (task_id, action, field_name, old_value, new_value, changed_by)
+                       VALUES (%s,'reject_update','task_update','pending',%s,%s)''', (task_id, description, approver_id))
         conn.commit()
         return task_id, total_progress, status
 
