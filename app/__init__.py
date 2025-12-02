@@ -27,40 +27,51 @@ def create_app():
         return app
     cur = conn.cursor()
     cur.execute('SELECT COUNT(*) FROM designations')
-    if cur.fetchone()[0] == 0:
-        chairman_id = None
+    designation_count = cur.fetchone()[0]
+    chairman_id = None
+    ceo_id = None
+    hod_id = None
+    manager_id = None
+    if designation_count == 0:
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Chairman', None))
+        chairman_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('CEO', chairman_id))
+        ceo_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Head of Department', ceo_id))
+        hod_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Manager', hod_id))
+        manager_id = cur.fetchone()[0]
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
+    else:
         cur.execute('SELECT id FROM designations WHERE title=%s', ('Chairman',))
         row = cur.fetchone()
-        if row:
-            chairman_id = row[0]
-        else:
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Chairman', None))
-            chairman_id = cur.fetchone()[0]
+        chairman_id = row[0] if row else None
         cur.execute('SELECT id FROM designations WHERE title=%s', ('CEO',))
         row = cur.fetchone()
-        if row:
-            ceo_id = row[0]
-        else:
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('CEO', chairman_id))
-            ceo_id = cur.fetchone()[0]
+        ceo_id = row[0] if row else None
         cur.execute('SELECT id FROM designations WHERE title=%s', ('Head of Department',))
         row = cur.fetchone()
-        if row:
-            hod_id = row[0]
-        else:
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Head of Department', ceo_id))
-            hod_id = cur.fetchone()[0]
+        hod_id = row[0] if row else None
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('Manager',))
+        row = cur.fetchone()
+        manager_id = row[0] if row else None
+        cur.execute('SELECT id FROM designations WHERE title=%s', ('Staff',))
+        row = cur.fetchone()
+        if not row and manager_id:
+            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
+    if not manager_id:
         cur.execute('SELECT id FROM designations WHERE title=%s', ('Manager',))
         row = cur.fetchone()
         if row:
             manager_id = row[0]
-        else:
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s) RETURNING id', ('Manager', hod_id))
-            manager_id = cur.fetchone()[0]
-        cur.execute('SELECT id FROM designations WHERE title=%s', ('Staff',))
-        if not cur.fetchone():
-            cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Staff', manager_id))
-        conn.commit()
+    cur.execute('SELECT id FROM designations WHERE title=%s', ('Auditor',))
+    if not cur.fetchone():
+        cur.execute('INSERT INTO designations (title, parent_id) VALUES (%s, %s)', ('Auditor', manager_id))
+    cur.execute('SELECT id FROM roles WHERE name=%s', ('Auditor',))
+    if not cur.fetchone():
+        cur.execute('INSERT INTO roles (name, description) VALUES (%s, %s)',
+                    ('Auditor', 'Responsible for auditing tasks and ensuring compliance.'))
+    conn.commit()
     conn.close()
 
     def can_user_approve_update(current_user, task, update, employee_lookup=None):
