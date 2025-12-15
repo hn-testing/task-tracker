@@ -11,7 +11,7 @@ PG_PASSWORD = os.getenv('PG_PASSWORD','postgres')
 def main():
     conn = psycopg2.connect(host=PG_HOST, port=PG_PORT, dbname=PG_DB, user=PG_USER, password=PG_PASSWORD)
     cur = conn.cursor()
-    for tbl in ['tasks','employees','branches','designations','alembic_version']:
+    for tbl in ['tasks','task_types','employees','branches','designations','alembic_version']:
         try:
             cur.execute(f'DROP TABLE IF EXISTS {tbl} CASCADE')
         except Exception as e:

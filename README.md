@@ -34,7 +34,8 @@ python scripts/seed_branches.py
 - Passwords are now stored hashed with bcrypt (passlib). Default new employee password is `changeme` unless you supply one.
 - Migration script re-hashes existing plaintext passwords.
 - Ensure `psycopg2-binary`, `passlib`, `SQLAlchemy`, and `alembic` are installed.
- - Recurring tasks: choose frequency (daily/weekly/monthly/yearly), interval, optional stop date on assignment, copy, or bulk upload. Future occurrences auto-generate when viewing the Tasks page.
+- Task types now live in the `task_types` table; the app seeds default values on startup, and the Assign Task page reads from this list.
+- Recurring tasks: choose frequency (daily/weekly/monthly/yearly), interval, optional stop date on assignment, copy, or bulk upload. Future occurrences auto-generate when viewing the Tasks page.
 
 ### 4. Future Improvements
 - Alembic migrations added (initial revision executes schema). Future changes should use `alembic revision --autogenerate` after adding SQLAlchemy models.

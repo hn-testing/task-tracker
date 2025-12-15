@@ -60,11 +60,18 @@
                 <option value="team">Team</option>
             </select><br>
             <label>Task Type:</label>
-            <select name="type" required>
+            <select name="type" {% if not task_types %}disabled{% endif %} required>
+                {% if task_types %}
                 {% for t in task_types %}
-                <option value="{{ t }}">{{ t }}</option>
+                <option value="{{ t.name }}">{{ t.name }}</option>
                 {% endfor %}
+                {% else %}
+                <option value="">No task types configured</option>
+                {% endif %}
             </select><br>
+            {% if not task_types %}
+            <div style="margin-bottom:12px; color:#b91c1c; font-weight:bold;">No task types found. Please ask an administrator to add some.</div>
+            {% endif %}
             <label>Start Date:</label>
             <input type="date" name="start_date" required><br>
             <label>End Date:</label>

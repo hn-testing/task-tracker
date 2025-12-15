@@ -44,6 +44,27 @@ def get_departments():
         cur.execute('SELECT id, name FROM departments ORDER BY name ASC')
         return cur.fetchall()
 
+def get_task_types(include_inactive=False):
+    query = 'SELECT id, name, is_active, display_order FROM task_types'
+    params = []
+    if not include_inactive:
+        query += ' WHERE is_active = TRUE'
+    query += ' ORDER BY display_order ASC, name ASC'
+    with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+    return rows
+
+def ensure_task_types(default_types=None):
+    defaults = default_types or ['Sell product1', 'Sell product2', 'Support', 'Demo', 'Other']
+    with connect_db() as conn, conn.cursor() as cur:
+        cur.execute('SELECT COUNT(*) FROM task_types')
+        count = cur.fetchone()[0]
+        if count == 0 and defaults:
+            for idx, name in enumerate(defaults, start=1):
+                cur.execute('INSERT INTO task_types (name, display_order) VALUES (%s, %s)', (name, idx))
+        conn.commit()
+
 def get_employees():
     with connect_db() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute('''
@@ -374,6 +395,7 @@ def ensure_sequences():
             ('branches','branches_id_seq'),
             ('roles','roles_id_seq'),
             ('departments','departments_id_seq'),
+            ('task_types','task_types_id_seq'),
             ('employees','employees_id_seq'),
             ('tasks','tasks_id_seq'),
             ('task_audit','task_audit_id_seq'),

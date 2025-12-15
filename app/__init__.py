@@ -75,6 +75,12 @@ def create_app():
     conn.commit()
     conn.close()
 
+    try:
+        if hasattr(database, 'ensure_task_types'):
+            database.ensure_task_types()
+    except Exception as e:
+        print(f"[WARN] Task type seeding failed: {e}")
+
     def can_user_approve_update(current_user, task, update, employee_lookup=None):
         """Return True when the user is authorised to approve a task update."""
         if not current_user or not task or not update:
@@ -623,6 +629,8 @@ def create_app():
         if hasattr(database,'get_subordinate_employee_ids'):
             subordinate_ids = database.get_subordinate_employee_ids(current_user['id'])
         allowed_assignees = {current_user['id']} | set(subordinate_ids)
+        task_type_rows = database.get_task_types() if hasattr(database, 'get_task_types') else []
+        valid_task_types = {row.get('name') for row in task_type_rows if row.get('name')}
         result = None
         errors = []
         if request.method == 'POST':
@@ -662,6 +670,8 @@ def create_app():
                             add_error('category', "Must be 'personal' or 'team'.")
                         if not type_:
                             add_error('type', 'Value required.')
+                        elif valid_task_types and type_ not in valid_task_types:
+                            add_error('type', 'Not found in configured task types.')
                         if not start_date:
                             add_error('start_date', 'Value required.')
                         if not end_date:
@@ -868,7 +878,8 @@ def create_app():
             return redirect(url_for('login'))
         employees = database.get_employees()
         error = None
-        task_types = ['Sell product1', 'Sell product2', 'Support', 'Demo', 'Other']
+        task_types = database.get_task_types() if hasattr(database, 'get_task_types') else []
+        task_type_names = [t.get('name') for t in task_types if t.get('name')]
         current_user = database.get_employee(session['user_id'])
         subordinate_ids = []
         if hasattr(database, 'get_subordinate_employee_ids'):
@@ -877,7 +888,7 @@ def create_app():
         if request.method == 'POST':
             name = request.form['name']
             category = request.form['category']
-            type_ = request.form['type']
+            type_ = request.form.get('type', '').strip()
             start_date = request.form['start_date']
             end_date = request.form['end_date']
             target = int(request.form['target'])
@@ -885,9 +896,15 @@ def create_app():
             current_progress = int(request.form['current_progress'])
             assigned_by = session['user_id']
             assigned_to = int(request.form['assigned_to'])
+            if not task_type_names:
+                error = 'No task types have been configured. Please contact an administrator.'
+            elif not type_:
+                error = 'Task type is required.'
+            elif type_ not in task_type_names:
+                error = 'Selected task type is not available.'
             if assigned_to not in [e['id'] for e in assignable_employees]:
                 error = 'You can only assign tasks to subordinates.'
-            else:
+            if not error:
                 try:
                     task_id = database.create_task(name, category, type_, start_date, end_date, target, status, assigned_by, assigned_to, current_progress=current_progress)
                     # Handle recurrence template creation
