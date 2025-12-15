@@ -648,64 +648,109 @@ def create_app():
                         rec_freq = row.get('recurrence_frequency','').strip().lower()
                         rec_interval_raw = row.get('recurrence_interval','').strip()
                         rec_stop_date = row.get('recurrence_stop_date','').strip()
-                        if not (name and category in ['personal','team'] and type_ and start_date and end_date and target and status in ['todo','in progress','completed','blocked'] and assigned_to):
-                            errors.append(f'Row {i}: Missing or invalid required fields.')
-                            continue
-                        try:
-                            target_int = int(target)
-                        except Exception:
-                            errors.append(f'Row {i}: target must be integer.')
-                            continue
-                        try:
-                            current_progress_int = int(current_progress) if current_progress else 0
-                        except Exception:
-                            errors.append(f'Row {i}: current_progress must be integer.')
-                            continue
-                        try:
-                            start_date_obj = datetime.datetime.strptime(start_date, '%d-%m-%Y').date()
-                            end_date_obj = datetime.datetime.strptime(end_date, '%d-%m-%Y').date()
-                        except Exception:
-                            errors.append(f'Row {i}: invalid date format (DD-MM-YYYY expected).')
-                            continue
+
+                        row_errors = []
+
+                        def add_error(column, message):
+                            row_errors.append(f"Row {i}, column '{column}': {message}")
+
+                        if not name:
+                            add_error('name', 'Value required.')
+                        if not category:
+                            add_error('category', 'Value required.')
+                        elif category.lower() not in {'personal','team'}:
+                            add_error('category', "Must be 'personal' or 'team'.")
+                        if not type_:
+                            add_error('type', 'Value required.')
+                        if not start_date:
+                            add_error('start_date', 'Value required.')
+                        if not end_date:
+                            add_error('end_date', 'Value required.')
+                        if not target:
+                            add_error('target', 'Value required.')
+                        if not status:
+                            add_error('status', 'Value required.')
+                        elif status not in {'todo','in progress','completed','blocked'}:
+                            add_error('status', "Must be one of todo / in progress / completed / blocked.")
+                        if not assigned_to:
+                            add_error('assigned_to', 'Value required.')
+
+                        target_int = None
+                        if target:
+                            try:
+                                target_int = int(target)
+                            except Exception:
+                                add_error('target', 'Must be an integer.')
+
+                        current_progress_int = 0
+                        if current_progress:
+                            try:
+                                current_progress_int = int(current_progress)
+                            except Exception:
+                                add_error('current_progress', 'Must be an integer when provided.')
+
+                        start_date_obj = None
+                        if start_date:
+                            try:
+                                start_date_obj = datetime.datetime.strptime(start_date, '%d-%m-%Y').date()
+                            except Exception:
+                                add_error('start_date', 'Invalid format, expected DD-MM-YYYY.')
+
+                        end_date_obj = None
+                        if end_date:
+                            try:
+                                end_date_obj = datetime.datetime.strptime(end_date, '%d-%m-%Y').date()
+                            except Exception:
+                                add_error('end_date', 'Invalid format, expected DD-MM-YYYY.')
+
                         assigned_to_id = None
-                        if assigned_to.isdigit():
-                            assigned_to_id = int(assigned_to)
-                        else:
-                            match_emp = next((e for e in employees if e['email'].lower()==assigned_to.lower()), None)
-                            if match_emp:
-                                assigned_to_id = match_emp['id']
-                        if not assigned_to_id:
-                            errors.append(f'Row {i}: assigned_to not found.')
+                        if assigned_to:
+                            if assigned_to.isdigit():
+                                assigned_to_id = int(assigned_to)
+                            else:
+                                match_emp = next((e for e in employees if e['email'].lower()==assigned_to.lower()), None)
+                                if match_emp:
+                                    assigned_to_id = match_emp['id']
+                            if not assigned_to_id:
+                                add_error('assigned_to', 'Employee not found.')
+                            elif assigned_to_id not in allowed_assignees:
+                                add_error('assigned_to', 'Employee is not you or within your hierarchy.')
+
+                        if rec_freq and rec_freq not in {'daily','weekly','monthly','yearly'}:
+                            add_error('recurrence_frequency', "Must be one of daily/weekly/monthly/yearly.")
+
+                        interval_val = 1
+                        if rec_interval_raw:
+                            try:
+                                interval_val = int(rec_interval_raw)
+                            except Exception:
+                                add_error('recurrence_interval', 'Must be an integer if provided.')
+
+                        stop_date_val = None
+                        if rec_stop_date:
+                            try:
+                                stop_date_val = datetime.datetime.strptime(rec_stop_date, '%d-%m-%Y').date().isoformat()
+                            except Exception:
+                                add_error('recurrence_stop_date', 'Invalid format, expected DD-MM-YYYY.')
+
+                        if row_errors:
+                            errors.extend(row_errors)
                             continue
-                        if assigned_to_id not in allowed_assignees:
-                            errors.append(f'Row {i}: assigned_to not in your subordinate tree or self.')
-                            continue
+
                         start_date_iso = start_date_obj.isoformat()
                         end_date_iso = end_date_obj.isoformat()
                         new_task_id = None
                         try:
-                            new_task_id = database.create_task(name, category, type_, start_date_iso, end_date_iso, target_int, status, current_user['id'], assigned_to_id, current_progress=current_progress_int)
+                            new_task_id = database.create_task(name, category.lower(), type_, start_date_iso, end_date_iso, target_int, status, current_user['id'], assigned_to_id, current_progress=current_progress_int)
                             created += 1
                         except Exception:
-                            errors.append(f'Row {i}: DB error creating task.')
+                            errors.append(f'Row {i}: database error creating task.')
                             continue
-                        # Optional recurrence template creation
-                        if new_task_id and rec_freq in ['daily','weekly','monthly','yearly']:
-                            interval_val = 1
-                            if rec_interval_raw:
-                                try:
-                                    interval_val = int(rec_interval_raw)
-                                except Exception:
-                                    errors.append(f'Row {i}: recurrence_interval invalid, defaulting to 1.')
-                            stop_date_val = None
-                            if rec_stop_date:
-                                try:
-                                    stop_date_val = datetime.datetime.strptime(rec_stop_date, '%d-%m-%Y').date().isoformat()
-                                except Exception:
-                                    errors.append(f'Row {i}: recurrence_stop_date invalid format (DD-MM-YYYY expected).')
+
+                        if new_task_id and rec_freq in {'daily','weekly','monthly','yearly'}:
                             try:
                                 if hasattr(database,'create_recurring_template_from_existing'):
-                                    database.create_recurring_template_from_existing(name, category, type_, start_date_iso, end_date_iso, target_int, status, current_user['id'], assigned_to_id, new_task_id, rec_freq, interval_val, stop_date_val)
+                                    database.create_recurring_template_from_existing(name, category.lower(), type_, start_date_iso, end_date_iso, target_int, status, current_user['id'], assigned_to_id, new_task_id, rec_freq, interval_val, stop_date_val)
                             except Exception:
                                 errors.append(f'Row {i}: failed to create recurrence template.')
                     result = f"Created {created} task(s)."
