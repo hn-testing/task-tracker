@@ -652,7 +652,7 @@ def create_app():
                         row_errors = []
 
                         def add_error(column, message):
-                            row_errors.append(f"Row {i}, column '{column}': {message}")
+                            row_errors.append(f"{column}: {message}")
 
                         if not name:
                             add_error('name', 'Value required.')
@@ -734,7 +734,7 @@ def create_app():
                                 add_error('recurrence_stop_date', 'Invalid format, expected DD-MM-YYYY.')
 
                         if row_errors:
-                            errors.extend(row_errors)
+                            errors.append(f"Row {i}: " + '; '.join(row_errors))
                             continue
 
                         start_date_iso = start_date_obj.isoformat()
@@ -794,46 +794,63 @@ def create_app():
                         role_name = row.get('role_name','').strip()
                         department_name = row.get('department_name','').strip()
                         password = row.get('password','changeme').strip() or 'changeme'
-                        if not (name and email and designation_title):
-                            errors.append(f'Row {i}: missing required fields.')
-                            continue
-                        if email.lower() in email_to_id:
-                            errors.append(f'Row {i}: email already exists, skipped.')
-                            continue
-                        designation_id = designations.get(designation_title)
-                        if not designation_id:
-                            errors.append(f'Row {i}: designation_title not found.')
-                            continue
+
+                        row_errors = []
+
+                        def add_error(column, message):
+                            row_errors.append(f"{column}: {message}")
+
+                        if not name:
+                            add_error('name', 'Value required.')
+                        if not email:
+                            add_error('email', 'Value required.')
+                        elif email.lower() in email_to_id:
+                            add_error('email', 'Already exists.')
+                        if not designation_title:
+                            add_error('designation_title', 'Value required.')
+
+                        designation_id = None
+                        if designation_title:
+                            designation_id = designations.get(designation_title)
+                            if not designation_id and designation_title.isdigit():
+                                designation_id = int(designation_title)
+                            elif not designation_id:
+                                add_error('designation_title', 'Not found in designations list.')
+
                         manager_id = None
                         if manager_email:
                             manager_id = email_to_id.get(manager_email.lower())
                             if not manager_id:
-                                errors.append(f'Row {i}: manager_email not found.')
-                                continue
+                                add_error('manager_email', 'Manager email not found.')
+
                         branch_id = None
                         if branch_name:
                             branch_id = branches.get(branch_name)
                             if not branch_id and branch_name.isdigit():
                                 branch_id = int(branch_name)
                             elif not branch_id:
-                                errors.append(f'Row {i}: branch "{branch_name}" not found.')
-                                continue
+                                add_error('branch_name', f'Branch "{branch_name}" not found.')
+
                         role_id = None
                         if role_name:
                             role_id = roles.get(role_name)
                             if not role_id and role_name.isdigit():
                                 role_id = int(role_name)
                             elif not role_id:
-                                errors.append(f'Row {i}: role "{role_name}" not found.')
-                                continue
+                                add_error('role_name', f'Role "{role_name}" not found.')
+
                         department_id = None
                         if department_name:
                             department_id = departments.get(department_name)
                             if not department_id and department_name.isdigit():
                                 department_id = int(department_name)
                             elif not department_id:
-                                errors.append(f'Row {i}: department "{department_name}" not found.')
-                                continue
+                                add_error('department_name', f'Department "{department_name}" not found.')
+
+                        if row_errors:
+                            errors.append(f"Row {i}: " + '; '.join(row_errors))
+                            continue
+
                         try:
                             database.create_employee(name, email, designation_id, manager_id, branch_id, role_id, department_id, raw_password=password)
                             created += 1
