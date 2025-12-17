@@ -189,6 +189,10 @@ def create_app():
     def hello_world():
         return 'Hello, World!'
 
+    @app.route("/dashboardtest")
+    def dashboard():
+        return render_template("powerbi_dashboard.html")
+
     @app.route('/employees', methods=['GET'])
     def employees():
         employees = database.get_employees()
