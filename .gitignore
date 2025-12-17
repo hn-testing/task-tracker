@@ -6,3 +6,4 @@ venv/
 .env
 prompt1.txt
 *.csv
+.tmp/
