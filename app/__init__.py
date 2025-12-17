@@ -986,6 +986,13 @@ def create_app():
                 rejector = employees_by_id.get(update['rejected_by'])
                 if rejector:
                     update['rejected_by_name'] = rejector.get('name')
+            approver_names = []
+            for emp in employees:
+                if emp and emp.get('id') and can_user_approve_update(emp, task, update, employees_by_id):
+                    name = emp.get('name')
+                    if name and name not in approver_names:
+                        approver_names.append(name)
+            update['approver_names'] = sorted(approver_names, key=lambda n: n.lower())
             update['can_approve'] = False
             is_pending = not update.get('approved') and not update.get('rejected')
             if is_pending:

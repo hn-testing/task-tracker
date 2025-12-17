@@ -84,6 +84,7 @@
                 <th>Nature of Business</th>
                 <th>Customer Response</th>
                 <th>Remarks</th>
+                <th>Approvers</th>
                 <th>Approval</th>
                 <th>Actions</th>
             </tr>
@@ -106,6 +107,13 @@
                 <td>{{ update['customer_business_nature'] or '-' }}</td>
                 <td>{{ update['customer_response'] or '-' }}</td>
                 <td>{{ update['remarks'] or '-' }}</td>
+                <td>
+                    {% if update['approver_names'] %}
+                        {{ update['approver_names'] | join(', ') }}
+                    {% else %}
+                        <span style="color:#6b7280;">Not determined</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if update['approved'] %}
                         <div>Approved{% if update['approved_by_name'] %} by {{ update['approved_by_name'] }}{% endif %}{% if update['approved_at'] %} on {{ update['approved_at']|as_dmy_hm }}{% endif %}</div>
